@@ -1,0 +1,32 @@
+# ── Environment ───────────────────────────────────────────────
+.env
+*.local
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / Astro ──────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.astro/
+npm-debug.log*
+
+# ── Uploaded deck files ───────────────────────────────────────
+# Decks are user content, not code. The sample deck under decks/
+# is force-added in the repo as a fixture; real uploads are ignored.
+# (Adjust if UPLOAD_DIR points elsewhere in production.)
+
+# ── Claude Code local settings ────────────────────────────────
+.claude/settings.local.json
+
+# ── OS / editor ───────────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/

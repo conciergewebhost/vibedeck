@@ -1,0 +1,13 @@
+---
+/**
+ * TitleCard — deck opening card, large display treatment.
+ * STUB: renders raw body; real markdown rendering + styling pending.
+ */
+interface Props { meta: Record<string, unknown>; body: string; }
+const { body } = Astro.props;
+---
+<section class="card card--title" set:html={body} />
+
+<style>
+  .card--title { padding: var(--vd-card-padding); }
+</style>

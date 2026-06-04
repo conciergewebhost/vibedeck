@@ -1,0 +1,40 @@
+/* ── Vibedeck default theme ────────────────────────────────────
+ * The theming contract. Every theme defines this same set of CSS
+ * variables; a deck's `theme` frontmatter field maps to a file in
+ * this directory (e.g. theme: z13-dark -> themes/z13-dark.css).
+ *
+ * Rule (CLAUDE.md): no hardcoded colours anywhere in components —
+ * everything references a var(--vd-*) token defined here. To add a
+ * theme, copy this file and re-tune the values; do not add new
+ * variable NAMES without updating every theme.
+ * ------------------------------------------------------------- */
+
+:root {
+  /* Surfaces */
+  --vd-bg: #0f172a;
+  --vd-card-bg: #1e293b;
+  --vd-card-border: #334155;
+
+  /* Text */
+  --vd-text: #e2e8f0;
+  --vd-text-muted: #94a3b8;
+  --vd-heading: #f8fafc;
+
+  /* Accent (gradients, quote rules, active nav) */
+  --vd-accent: #818cf8;
+  --vd-accent-2: #c084fc;
+
+  /* Typography */
+  --vd-font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --vd-font-heading: var(--vd-font-body);
+  --vd-font-scale: 1; /* per-theme master type multiplier */
+
+  /* Layout */
+  --vd-card-max-width: 40rem;
+  --vd-card-padding: clamp(1.5rem, 5vw, 3rem);
+  --vd-radius: 1rem;
+
+  /* Navigation chrome */
+  --vd-nav-bg: rgba(15, 23, 42, 0.8);
+  --vd-progress: var(--vd-text-muted);
+}

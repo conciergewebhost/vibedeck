@@ -1,0 +1,28 @@
+---
+/**
+ * CardRenderer — maps a parsed card's `type` to its component.
+ * Single place that knows the type->component table, so adding a card
+ * type touches exactly one switchboard. STUB: components render raw body.
+ */
+import TitleCard from "./TitleCard.astro";
+import ConceptCard from "./ConceptCard.astro";
+import SummaryCard from "./SummaryCard.astro";
+import GraphicCard from "./GraphicCard.astro";
+import QuoteCard from "./QuoteCard.astro";
+
+interface Card { type: string; meta: Record<string, unknown>; body: string; }
+interface Props { card: Card; }
+
+const { card } = Astro.props;
+
+const REGISTRY: Record<string, any> = {
+  title: TitleCard,
+  concept: ConceptCard,
+  summary: SummaryCard,
+  graphic: GraphicCard,
+  quote: QuoteCard,
+};
+
+const Component = REGISTRY[card.type] ?? ConceptCard;
+---
+<Component meta={card.meta} body={card.body} />

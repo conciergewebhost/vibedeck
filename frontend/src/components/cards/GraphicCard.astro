@@ -1,0 +1,13 @@
+---
+/**
+ * GraphicCard — full-bleed image or chart with a small caption beneath.
+ * STUB: renders raw body; real markdown rendering + styling pending.
+ */
+interface Props { meta: Record<string, unknown>; body: string; }
+const { body } = Astro.props;
+---
+<section class="card card--graphic" set:html={body} />
+
+<style>
+  .card--graphic { padding: var(--vd-card-padding); }
+</style>

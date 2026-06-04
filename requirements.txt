@@ -1,0 +1,22 @@
+# ── Vibedeck backend dependencies ─────────────────────────────
+# Pin major/minor; let patch float. Python 3.11+.
+
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+
+# ORM + migrations (SQLAlchemy 2.0 style)
+sqlalchemy==2.0.*
+alembic==1.14.*
+psycopg[binary]==3.2.*          # PostgreSQL driver
+
+# Settings & validation (Pydantic v2)
+pydantic==2.*
+pydantic-settings==2.*
+
+# Markdown deck parsing
+python-frontmatter==1.1.*       # YAML frontmatter splitting
+python-multipart==0.0.*         # file upload form parsing
+
+# Auth (JWT + password hashing)
+pyjwt==2.10.*
+passlib[bcrypt]==1.7.*

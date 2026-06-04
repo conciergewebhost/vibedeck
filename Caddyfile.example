@@ -1,0 +1,21 @@
+# ── Vibedeck — example Caddy site block ───────────────────────
+# Copy the relevant block into /etc/caddy/Caddyfile (or import it).
+# Caddy manages TLS automatically. Adjust ports to match your
+# uvicorn (backend) and Astro node server (frontend) processes.
+#
+# Model: Astro SSR serves all pages and proxies API calls to FastAPI.
+# The frontend node server listens on :4321, the backend on :8000.
+
+vibedeck.online {
+	encode gzip zstd
+
+	# API → FastAPI backend
+	handle /api/* {
+		reverse_proxy localhost:8000
+	}
+
+	# Everything else → Astro SSR node server
+	handle {
+		reverse_proxy localhost:4321
+	}
+}

@@ -1,0 +1,29 @@
+/* ── Global reset + base, mobile-first ────────────────────────
+ * Desktop is the enhancement, not the default. All colour and type
+ * values come from theme variables (themes/*.css); none are hardcoded.
+ * ------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--vd-bg);
+  color: var(--vd-text);
+  font-family: var(--vd-font-body);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  color: var(--vd-heading);
+  font-family: var(--vd-font-heading);
+  line-height: 1.2;
+}
+
+a { color: var(--vd-accent); }
+
+img { max-width: 100%; height: auto; display: block; }

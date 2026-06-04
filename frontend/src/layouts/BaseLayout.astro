@@ -1,0 +1,31 @@
+---
+/**
+ * BaseLayout — shared document shell.
+ *
+ * Loads the global base styles and the theme stylesheet selected per
+ * deck/topic. `theme` maps to a file in styles/themes/; it defaults to
+ * "default". Page content is projected through <slot/>.
+ */
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  theme?: string;
+}
+
+const { title, theme = "default" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    {/* Theme stylesheet — one file per theme, sets the --vd-* tokens. */}
+    <link rel="stylesheet" href={`/styles/themes/${theme}.css`} />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

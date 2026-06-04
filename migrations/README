@@ -1,0 +1,14 @@
+Alembic migrations for Vibedeck.
+
+The database URL comes from .env (DATABASE_URL) via migrations/env.py,
+not from alembic.ini. Models are imported from backend/models.
+
+Common commands (run from the repo root):
+
+    alembic revision --autogenerate -m "create initial schema"
+    alembic upgrade head
+    alembic downgrade -1
+    alembic history
+
+No migration has been generated yet — the initial schema is pending
+review of backend/models before the first autogenerate.

@@ -1,0 +1,23 @@
+---
+/**
+ * Topic deck-index page  ->  /{topic}
+ *
+ * Lists all decks in a topic (title, description, author, keyword tags,
+ * card count). SSR: fetches from the backend on each request.
+ *
+ * STUB: route is scaffolded. Data fetching from the backend topics API
+ * and the deck-list markup are the next increment.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const { topic } = Astro.params;
+
+// TODO: fetch topic + decks from `${BASE_URL}/api/topics/${topic}`,
+// 404 when the topic does not exist, apply the topic's signature theme.
+---
+<BaseLayout title={`Vibedeck — ${topic}`}>
+  <main style="padding: var(--vd-card-padding)">
+    <h1>{topic}</h1>
+    <p>Deck index for this topic — coming soon.</p>
+  </main>
+</BaseLayout>
