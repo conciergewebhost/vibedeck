@@ -1,13 +1,23 @@
 ---
-/**
- * GraphicCard — full-bleed image or chart with a small caption beneath.
- * STUB: renders raw body; real markdown rendering + styling pending.
- */
-interface Props { meta: Record<string, unknown>; body: string; }
-const { body } = Astro.props;
+/** GraphicCard — full-bleed image/chart with a small caption beneath. */
+interface Props { html: string; }
+const { html } = Astro.props;
 ---
-<section class="card card--graphic" set:html={body} />
+<div class="card-body card-body--graphic" set:html={html} />
 
 <style>
-  .card--graphic { padding: var(--vd-card-padding); }
+  .card-body--graphic {
+    text-align: center;
+  }
+  .card-body--graphic :global(img) {
+    border-radius: var(--vd-radius);
+    margin-inline: auto;
+  }
+  /* The paragraph following the image acts as the caption. */
+  .card-body--graphic :global(em) {
+    display: block;
+    margin-top: 0.75rem;
+    color: var(--vd-text-muted);
+    font-size: 0.9rem;
+  }
 </style>

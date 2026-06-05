@@ -1,13 +1,6 @@
 ---
-/**
- * ConceptCard — a single idea, explained cleanly. The constraint is the feature.
- * STUB: renders raw body; real markdown rendering + styling pending.
- */
-interface Props { meta: Record<string, unknown>; body: string; }
-const { body } = Astro.props;
+/** ConceptCard — a single idea, explained cleanly. */
+interface Props { html: string; }
+const { html } = Astro.props;
 ---
-<section class="card card--concept" set:html={body} />
-
-<style>
-  .card--concept { padding: var(--vd-card-padding); }
-</style>
+<div class="card-body card-body--concept" set:html={html} />

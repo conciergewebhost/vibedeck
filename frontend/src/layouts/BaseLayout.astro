@@ -8,12 +8,28 @@
  */
 import "../styles/global.css";
 
+// Theme stylesheets live in src/styles/themes/ (CLAUDE.md convention) and
+// are selected at runtime by the deck/topic `theme` field. We resolve each
+// theme NAME to its bundled, content-hashed URL via Vite's glob import, so
+// themes stay in src/ (bundled + cache-busted) instead of being relocated
+// to public/. Adding a theme = dropping a new file in styles/themes/.
+const themeUrls = import.meta.glob("../styles/themes/*.css", {
+  query: "?url",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
 interface Props {
   title: string;
   theme?: string;
 }
 
 const { title, theme = "default" } = Astro.props;
+
+// Resolve the requested theme; fall back to default for an unknown name.
+const themeHref =
+  themeUrls[`../styles/themes/${theme}.css`] ??
+  themeUrls["../styles/themes/default.css"];
 ---
 
 <!doctype html>
@@ -22,8 +38,9 @@ const { title, theme = "default" } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
-    {/* Theme stylesheet — one file per theme, sets the --vd-* tokens. */}
-    <link rel="stylesheet" href={`/styles/themes/${theme}.css`} />
+    {/* Theme stylesheet — one file per theme, sets the --vd-* tokens.
+        href is the bundled, hashed URL resolved above (not a raw path). */}
+    <link rel="stylesheet" href={themeHref} />
   </head>
   <body>
     <slot />

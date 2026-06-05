@@ -1,26 +1,21 @@
 ---
 /**
  * Deck card-view page  ->  /{topic}/{deck-slug}
- *
- * The reader: one full-viewport card at a time, paginated navigation
- * (swipe / arrow buttons / keyboard), "Page n of total" indicator, and
- * an index modal for direct jumps. SSR: fetches the deck (metadata +
- * parsed cards) from the backend, which re-parses the canonical file.
- *
- * STUB: route scaffolded. CardRenderer wiring, the paginator, and the
- * index modal are the next increment.
+ * The reader: paginated card view with full navigation. Applies the deck's
+ * theme. Card content is re-parsed from the canonical file by the backend.
  */
 import BaseLayout from "../../layouts/BaseLayout.astro";
-// import CardRenderer from "../../components/cards/CardRenderer.astro";
+import Reader from "../../components/Reader.astro";
+import { fetchDeck } from "../../lib/api";
 
 const { topic, deck } = Astro.params;
+const data = await fetchDeck(topic!, deck!);
 
-// TODO: fetch from `${BASE_URL}/api/decks/${topic}/${deck}` -> { meta, cards },
-// apply meta.theme, render cards[currentIndex] via CardRenderer, wire nav.
+if (!data) {
+  return new Response("Deck not found", { status: 404 });
+}
 ---
-<BaseLayout title={`Vibedeck — ${deck}`}>
-  <main style="padding: var(--vd-card-padding)">
-    <h1>{deck}</h1>
-    <p>Card view for this deck (in {topic}) — coming soon.</p>
-  </main>
+
+<BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme ?? "default"}>
+  <Reader deck={data} topicSlug={topic!} />
 </BaseLayout>

@@ -27,3 +27,24 @@ h1, h2, h3 {
 a { color: var(--vd-accent); }
 
 img { max-width: 100%; height: auto; display: block; }
+
+/* ── Shared card typography ───────────────────────────────────
+ * Base reading treatment for every card body; per-type components
+ * layer their own modifiers on top (see components/cards/*.astro).
+ */
+.card-body {
+  font-size: calc(1.0625rem * var(--vd-font-scale, 1));
+}
+.card-body h2 {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  margin: 0 0 1rem;
+}
+.card-body p {
+  margin: 0 0 1rem;
+}
+.card-body em {
+  color: var(--vd-text-muted);
+}
+.card-body a {
+  text-decoration: underline;
+}

@@ -119,18 +119,18 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 
 ## v1 Scope — What We're Building Now
 
-- [ ] Project scaffold — frontend and backend structure
-- [ ] PostgreSQL schema and Alembic migrations: users, decks, topics, keywords
-- [ ] Markdown parser — reads frontmatter and card blocks from uploaded files
-- [ ] FastAPI backend — deck upload, deck retrieval, topic listing
-- [ ] Auth infrastructure — JWT, user model, protected upload endpoint
-- [ ] Astro frontend — master index, topic index, card deck view
-- [ ] Card types: title, concept, summary, graphic, quote
-- [ ] Paginated navigation — swipe, buttons, keyboard arrows
-- [ ] Progress indicator — "Page n of total"
-- [ ] Index modal — card list, direct jump, back to topic
-- [ ] CSS variable theming — default theme ships with v1
-- [ ] Caddyfile.example for production deployment
+- [x] Project scaffold — frontend and backend structure
+- [x] PostgreSQL schema and Alembic migrations: users, decks, topics, keywords
+- [x] Markdown parser — reads frontmatter and card blocks from uploaded files
+- [x] FastAPI backend — deck upload, deck retrieval, topic listing
+- [x] Auth infrastructure — JWT, user model, protected upload endpoint
+- [x] Astro frontend — master index, topic index, card deck view
+- [x] Card types: title, concept, summary, graphic, quote
+- [x] Paginated navigation — swipe, buttons, keyboard arrows
+- [x] Progress indicator — "Page n of total"
+- [x] Index modal — card list, direct jump, back to topic
+- [x] CSS variable theming — default theme ships with v1
+- [x] Caddyfile.example for production deployment
 
 **Not in v1:** keyword filtering UI, user-facing auth UI, private decks, custom themes, multi-user publishing.
 

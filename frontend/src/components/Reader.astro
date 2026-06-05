@@ -1,0 +1,277 @@
+---
+/**
+ * Reader — the paginated card viewport.
+ *
+ * Renders every card into the DOM (first one active) and a small client
+ * script drives navigation: prev/next buttons, keyboard arrows, touch
+ * swipe, a "Page n of total" indicator, and an index modal that lists all
+ * cards for direct jumping. Framework-free: progressive enhancement on top
+ * of server-rendered HTML, so the first card is readable without JS.
+ */
+import CardRenderer from "./cards/CardRenderer.astro";
+import { cardLabel } from "../lib/markdown";
+import type { DeckDetail } from "../lib/api";
+
+interface Props {
+  deck: DeckDetail;
+  topicSlug: string;
+}
+
+const { deck, topicSlug } = Astro.props;
+const total = deck.cards.length;
+---
+
+<section class="reader" aria-roledescription="card deck">
+  <div class="reader__stage">
+    {
+      deck.cards.map((card, i) => (
+        <article
+          class:list={["reader__card", { "is-active": i === 0 }]}
+          data-index={i}
+          aria-hidden={i === 0 ? "false" : "true"}
+        >
+          <CardRenderer card={card} />
+        </article>
+      ))
+    }
+  </div>
+
+  <nav class="reader__nav" aria-label="Card navigation">
+    <button class="reader__btn" data-nav="prev" aria-label="Previous card">‹</button>
+    <span class="reader__progress">
+      <span data-current>1</span> / {total}
+    </span>
+    <button class="reader__btn" data-nav="next" aria-label="Next card">›</button>
+    <button class="reader__btn reader__btn--index" data-nav="index" aria-label="Open index">☰</button>
+  </nav>
+
+  <div class="reader__modal" data-modal hidden>
+    <div class="reader__modal-panel" role="dialog" aria-label="Card index">
+      <header class="reader__modal-head">
+        <a class="reader__back" href={`/${topicSlug}`}>‹ Back to deck list</a>
+        <button class="reader__btn" data-nav="close" aria-label="Close index">✕</button>
+      </header>
+      <ol class="reader__index">
+        {
+          deck.cards.map((card, i) => (
+            <li>
+              <button data-jump={i}>
+                <span class="reader__index-num">{i + 1}</span>
+                <span class="reader__index-label">{cardLabel(card.body, card.type)}</span>
+              </button>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </div>
+</section>
+
+<script>
+  function initReader() {
+    const reader = document.querySelector<HTMLElement>(".reader");
+    if (!reader) return;
+    const cards = Array.from(
+      reader.querySelectorAll<HTMLElement>(".reader__card"),
+    );
+    const total = cards.length;
+    const currentEl = reader.querySelector<HTMLElement>("[data-current]");
+    const modal = reader.querySelector<HTMLElement>("[data-modal]");
+    let idx = 0;
+
+    function show(n: number) {
+      idx = Math.max(0, Math.min(total - 1, n));
+      cards.forEach((c, i) => {
+        const active = i === idx;
+        c.classList.toggle("is-active", active);
+        c.setAttribute("aria-hidden", active ? "false" : "true");
+      });
+      if (currentEl) currentEl.textContent = String(idx + 1);
+    }
+
+    const openModal = () => modal?.removeAttribute("hidden");
+    const closeModal = () => modal?.setAttribute("hidden", "");
+
+    reader.querySelectorAll<HTMLElement>("[data-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        switch (btn.dataset.nav) {
+          case "next": show(idx + 1); break;
+          case "prev": show(idx - 1); break;
+          case "index": openModal(); break;
+          case "close": closeModal(); break;
+        }
+      });
+    });
+
+    reader.querySelectorAll<HTMLElement>("[data-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        show(Number(btn.dataset.jump));
+        closeModal();
+      });
+    });
+
+    // Dismiss the modal when tapping the backdrop.
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") show(idx + 1);
+      else if (e.key === "ArrowLeft") show(idx - 1);
+      else if (e.key === "Escape") closeModal();
+    });
+
+    // Touch swipe (horizontal).
+    let startX: number | null = null;
+    reader.addEventListener(
+      "touchstart",
+      (e) => { startX = e.changedTouches[0].clientX; },
+      { passive: true },
+    );
+    reader.addEventListener(
+      "touchend",
+      (e) => {
+        if (startX === null) return;
+        const dx = e.changedTouches[0].clientX - startX;
+        if (Math.abs(dx) > 40) show(dx < 0 ? idx + 1 : idx - 1);
+        startX = null;
+      },
+      { passive: true },
+    );
+
+    show(0);
+  }
+
+  initReader();
+</script>
+
+<style>
+  .reader {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--vd-bg);
+  }
+  .reader__stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: clamp(1.25rem, 5vw, 2.5rem);
+  }
+  .reader__card {
+    display: none;
+    width: 100%;
+    max-width: var(--vd-card-max-width);
+  }
+  .reader__card.is-active {
+    display: block;
+  }
+
+  .reader__nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    background: var(--vd-nav-bg);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--vd-card-border);
+  }
+  .reader__btn {
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    color: var(--vd-text);
+    border-radius: 999px;
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .reader__btn:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .reader__btn--index {
+    margin-left: auto;
+    font-size: 1.1rem;
+  }
+  .reader__progress {
+    color: var(--vd-progress);
+    font-variant-numeric: tabular-nums;
+    min-width: 4rem;
+    text-align: center;
+  }
+
+  .reader__modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 10;
+  }
+  .reader__modal[hidden] {
+    display: none;
+  }
+  .reader__modal-panel {
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius) var(--vd-radius) 0 0;
+    width: 100%;
+    max-width: 32rem;
+    max-height: 75vh;
+    overflow-y: auto;
+    padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  }
+  .reader__modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .reader__back {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+  }
+  .reader__index {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .reader__index button {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--vd-card-border);
+    color: var(--vd-text);
+    padding: 0.75rem 0.25rem;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  .reader__index button:hover {
+    color: var(--vd-accent);
+  }
+  .reader__index-num {
+    color: var(--vd-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Desktop: centre the index modal rather than sheet-from-bottom. */
+  @media (min-width: 48rem) {
+    .reader__modal {
+      align-items: center;
+    }
+    .reader__modal-panel {
+      border-radius: var(--vd-radius);
+    }
+  }
+</style>

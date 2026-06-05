@@ -18,9 +18,10 @@ frontend/.astro/
 npm-debug.log*
 
 # ── Uploaded deck files ───────────────────────────────────────
-# Decks are user content, not code. The sample deck under decks/
-# is force-added in the repo as a fixture; real uploads are ignored.
-# (Adjust if UPLOAD_DIR points elsewhere in production.)
+# Decks are user content, not code: ignore everything under decks/
+# except the sample fixture that ships with the repo.
+decks/*.md
+!decks/the-12-houses.md
 
 # ── Claude Code local settings ────────────────────────────────
 .claude/settings.local.json

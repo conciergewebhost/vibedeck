@@ -14,9 +14,14 @@ pydantic==2.*
 pydantic-settings==2.*
 
 # Markdown deck parsing
-python-frontmatter==1.1.*       # YAML frontmatter splitting
+# The parser does its own block splitting (deck fm + [card-fm, card-body]
+# pairs), so we use PyYAML directly rather than the single-document
+# python-frontmatter library.
+pyyaml==6.0.*                   # YAML frontmatter parsing
 python-multipart==0.0.*         # file upload form parsing
 
 # Auth (JWT + password hashing)
 pyjwt==2.10.*
-passlib[bcrypt]==1.7.*
+# bcrypt directly rather than via passlib: passlib 1.7.x is unmaintained
+# and fails outright with bcrypt 5.x. bcrypt's own API is simple enough.
+bcrypt==5.0.*

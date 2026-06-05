@@ -231,15 +231,15 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 ## Roadmap
 
 ### v1 (MVP)
-- [ ] Core card types: title, concept, summary, graphic, quote
-- [ ] Markdown authoring with frontmatter
-- [ ] Paginated card view with full navigation
-- [ ] Deck index per topic
-- [ ] Master index
-- [ ] CSS variable theming with frontmatter selection
-- [ ] Web upload interface
-- [ ] Auth infrastructure (backend, not full UI)
-- [ ] PostgreSQL schema: users, decks, topics, keywords
+- [x] Core card types: title, concept, summary, graphic, quote
+- [x] Markdown authoring with frontmatter
+- [x] Paginated card view with full navigation
+- [x] Deck index per topic
+- [x] Master index
+- [x] CSS variable theming with frontmatter selection
+- [x] Web upload interface (auth-gated API endpoint; no front-end upload page yet)
+- [x] Auth infrastructure (backend, not full UI)
+- [x] PostgreSQL schema: users, decks, topics, keywords
 
 ### v2
 - [ ] Keyword filtering UI on deck index

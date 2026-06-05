@@ -1,13 +1,25 @@
 ---
-/**
- * TitleCard — deck opening card, large display treatment.
- * STUB: renders raw body; real markdown rendering + styling pending.
- */
-interface Props { meta: Record<string, unknown>; body: string; }
-const { body } = Astro.props;
+/** TitleCard — deck opening card, large centred display treatment. */
+interface Props { html: string; }
+const { html } = Astro.props;
 ---
-<section class="card card--title" set:html={body} />
+<div class="card-body card-body--title" set:html={html} />
 
 <style>
-  .card--title { padding: var(--vd-card-padding); }
+  .card-body--title {
+    text-align: center;
+  }
+  .card-body--title :global(h1) {
+    font-size: clamp(2.25rem, 9vw, 4rem);
+    letter-spacing: -0.03em;
+    margin: 0 0 0.5rem;
+    background: linear-gradient(90deg, var(--vd-accent), var(--vd-accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .card-body--title :global(h3) {
+    color: var(--vd-text-muted);
+    font-weight: 400;
+  }
 </style>

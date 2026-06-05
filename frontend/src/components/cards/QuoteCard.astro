@@ -1,13 +1,18 @@
 ---
-/**
- * QuoteCard — pull quote, styled distinctively. Attribution optional.
- * STUB: renders raw body; real markdown rendering + styling pending.
- */
-interface Props { meta: Record<string, unknown>; body: string; }
-const { body } = Astro.props;
+/** QuoteCard — pull quote, styled distinctively. Attribution optional. */
+interface Props { html: string; }
+const { html } = Astro.props;
 ---
-<section class="card card--quote" set:html={body} />
+<div class="card-body card-body--quote" set:html={html} />
 
 <style>
-  .card--quote { padding: var(--vd-card-padding); }
+  .card-body--quote :global(blockquote) {
+    margin: 0;
+    border-left: 3px solid var(--vd-accent);
+    padding-left: 1.25rem;
+    font-size: clamp(1.25rem, 4vw, 1.75rem);
+    line-height: 1.4;
+    color: var(--vd-heading);
+    font-style: italic;
+  }
 </style>

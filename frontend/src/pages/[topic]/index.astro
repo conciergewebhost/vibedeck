@@ -1,23 +1,113 @@
 ---
 /**
  * Topic deck-index page  ->  /{topic}
- *
- * Lists all decks in a topic (title, description, author, keyword tags,
- * card count). SSR: fetches from the backend on each request.
- *
- * STUB: route is scaffolded. Data fetching from the backend topics API
- * and the deck-list markup are the next increment.
+ * Lists all decks in a topic. Applies the topic's signature theme.
  */
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { fetchTopic } from "../../lib/api";
 
 const { topic } = Astro.params;
+const data = await fetchTopic(topic!);
 
-// TODO: fetch topic + decks from `${BASE_URL}/api/topics/${topic}`,
-// 404 when the topic does not exist, apply the topic's signature theme.
+if (!data) {
+  return new Response("Topic not found", { status: 404 });
+}
 ---
-<BaseLayout title={`Vibedeck — ${topic}`}>
-  <main style="padding: var(--vd-card-padding)">
-    <h1>{topic}</h1>
-    <p>Deck index for this topic — coming soon.</p>
+
+<BaseLayout title={`${data.display_name} — Vibedeck`} theme={data.theme ?? "default"}>
+  <main class="topic">
+    <a class="topic__back" href="/">‹ All topics</a>
+    <h1>{data.display_name}</h1>
+    {data.description && <p class="topic__desc">{data.description}</p>}
+
+    {
+      data.decks.length === 0 ? (
+        <p>No decks in this topic yet.</p>
+      ) : (
+        <ul class="deck-list">
+          {data.decks.map((d) => (
+            <li class="deck-card">
+              <a href={`/${data.slug}/${d.slug}`}>
+                <h2>{d.title}</h2>
+                {d.description && <p class="deck-card__desc">{d.description}</p>}
+                <p class="deck-card__meta">
+                  {d.author} · {d.card_count} card{d.card_count === 1 ? "" : "s"}
+                </p>
+                {d.keywords.length > 0 && (
+                  <ul class="kw">
+                    {d.keywords.map((k) => (
+                      <li>{k}</li>
+                    ))}
+                  </ul>
+                )}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
   </main>
 </BaseLayout>
+
+<style>
+  .topic {
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3.5rem) 1.5rem;
+  }
+  .topic__back {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+  }
+  .topic__desc {
+    color: var(--vd-text-muted);
+    margin: 0 0 2rem;
+  }
+  .deck-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+  }
+  .deck-card a {
+    display: block;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-card-bg);
+    color: inherit;
+    text-decoration: none;
+  }
+  .deck-card a:hover {
+    border-color: var(--vd-accent);
+  }
+  .deck-card h2 {
+    margin: 0 0 0.4rem;
+  }
+  .deck-card__desc {
+    margin: 0 0 0.6rem;
+  }
+  .deck-card__meta {
+    color: var(--vd-text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.75rem;
+  }
+  .kw {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .kw li {
+    font-size: 0.75rem;
+    color: var(--vd-text-muted);
+    border: 1px solid var(--vd-card-border);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+  }
+</style>
