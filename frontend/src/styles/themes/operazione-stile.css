@@ -651,3 +651,34 @@ body::before {
     font-size: var(--text-xs);
   }
 }
+
+/* ══════════════════════════════════════════
+   VIBEDECK CONTRACT MAPPING
+   Maps this theme's palette/fonts onto the --vd-* tokens the reader
+   components (BaseLayout, cards, Reader) actually consume. Without this
+   block the components have no theme values. Tweak the color↔token
+   choices freely; the bespoke styles above are untouched.
+══════════════════════════════════════════ */
+:root {
+  --vd-bg: var(--color-base);
+  --vd-card-bg: var(--color-surface);
+  --vd-card-border: var(--color-border);
+
+  --vd-text: var(--color-cream);
+  --vd-text-muted: var(--color-muted);
+  --vd-heading: var(--color-cream);
+
+  --vd-accent: var(--color-primary);
+  --vd-accent-2: var(--color-highlight);
+
+  --vd-font-body: var(--font-body);
+  --vd-font-heading: var(--font-display);
+  --vd-font-scale: 1;
+
+  --vd-card-max-width: var(--card-max-width);
+  --vd-card-padding: clamp(1.5rem, 6vw, 3.5rem);
+  --vd-radius: var(--card-radius);
+
+  --vd-nav-bg: rgba(14, 12, 10, 0.92);
+  --vd-progress: var(--color-muted);
+}
