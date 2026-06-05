@@ -1,0 +1,348 @@
+---
+/**
+ * /admin — discreet deck management surface (not linked from anywhere).
+ *
+ * Token-gated: you enter the shared UPLOAD_TOKEN, which is exchanged for a
+ * JWT (stored in sessionStorage) bound to the owner account. Then you can
+ * upload, list, and delete decks. All API calls are SAME-ORIGIN (/api/...
+ * via Caddy) and carry the JWT as a Bearer header — this does NOT use the
+ * SSR api.ts client. Progressive-enhancement client script, framework-free.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Vibedeck Admin">
+  <main class="admin">
+    <!-- Lock screen -->
+    <section class="admin__lock" data-lock>
+      <h1 class="admin__title">Vibedeck Admin</h1>
+      <form class="admin__row" data-unlock-form>
+        <input
+          class="admin__input"
+          type="password"
+          data-token
+          placeholder="Access token"
+          autocomplete="off"
+          aria-label="Access token"
+        />
+        <button class="admin__btn" type="submit">Unlock</button>
+      </form>
+      <p class="admin__err" data-lock-err hidden></p>
+    </section>
+
+    <!-- Panel (revealed after unlock) -->
+    <section class="admin__panel" data-panel hidden>
+      <header class="admin__head">
+        <h1 class="admin__title">Vibedeck Admin</h1>
+        <button class="admin__link" data-signout>Sign out</button>
+      </header>
+
+      <form class="admin__row" data-upload-form>
+        <input
+          class="admin__file"
+          type="file"
+          data-file
+          accept=".md,text/markdown"
+          required
+          aria-label="Deck markdown file"
+        />
+        <button class="admin__btn" type="submit">Upload deck</button>
+      </form>
+      <p class="admin__msg" data-upload-msg role="status"></p>
+
+      <h2 class="admin__subhead">Decks</h2>
+      <ul class="admin__decks" data-deck-list></ul>
+    </section>
+  </main>
+</BaseLayout>
+
+<script>
+  const TOKEN_KEY = "vd_admin_jwt";
+
+  type AdminDeck = {
+    topic: string;
+    slug: string;
+    title: string;
+    author: string;
+    card_count: number;
+    filename: string;
+    url: string;
+  };
+
+  const $ = <T extends HTMLElement>(sel: string) =>
+    document.querySelector<T>(sel);
+
+  function authHeaders(): Record<string, string> {
+    const jwt = sessionStorage.getItem(TOKEN_KEY);
+    return jwt ? { Authorization: `Bearer ${jwt}` } : {};
+  }
+
+  function showLock(message?: string) {
+    $("[data-panel]")?.setAttribute("hidden", "");
+    $("[data-lock]")?.removeAttribute("hidden");
+    const err = $<HTMLElement>("[data-lock-err]");
+    if (err) {
+      err.textContent = message ?? "";
+      err.hidden = !message;
+    }
+  }
+
+  function showPanel() {
+    $("[data-lock]")?.setAttribute("hidden", "");
+    $("[data-panel]")?.removeAttribute("hidden");
+  }
+
+  function signOut() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    showLock();
+  }
+
+  async function unlock(token: string): Promise<boolean> {
+    const res = await fetch("/api/auth/upload-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    sessionStorage.setItem(TOKEN_KEY, data.access_token);
+    return true;
+  }
+
+  async function loadDecks() {
+    const res = await fetch("/api/decks", { headers: authHeaders() });
+    if (res.status === 401) return signOut();
+    const decks: AdminDeck[] = await res.json();
+    renderDecks(decks);
+  }
+
+  function renderDecks(decks: AdminDeck[]) {
+    const list = $<HTMLUListElement>("[data-deck-list]");
+    if (!list) return;
+    list.replaceChildren();
+    if (decks.length === 0) {
+      const li = document.createElement("li");
+      li.className = "admin__empty";
+      li.textContent = "No decks indexed yet.";
+      list.append(li);
+      return;
+    }
+    for (const d of decks) {
+      const li = document.createElement("li");
+      li.className = "admin__deck";
+
+      const link = document.createElement("a");
+      link.href = d.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = d.title;
+      link.className = "admin__deck-title";
+
+      const meta = document.createElement("span");
+      meta.className = "admin__deck-meta";
+      meta.textContent = `${d.author} · ${d.card_count} cards · /${d.topic}/${d.slug}`;
+
+      const del = document.createElement("button");
+      del.className = "admin__del";
+      del.type = "button";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteDeck(d));
+
+      const info = document.createElement("div");
+      info.className = "admin__deck-info";
+      info.append(link, meta);
+      li.append(info, del);
+      list.append(li);
+    }
+  }
+
+  async function deleteDeck(d: AdminDeck) {
+    if (!confirm(`Delete "${d.title}" (/${d.topic}/${d.slug})? This removes the file too.`))
+      return;
+    const res = await fetch(
+      `/api/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
+      { method: "DELETE", headers: authHeaders() },
+    );
+    if (res.status === 401) return signOut();
+    if (res.ok || res.status === 404) loadDecks();
+  }
+
+  async function upload(file: File) {
+    const msg = $<HTMLElement>("[data-upload-msg]");
+    if (msg) msg.textContent = "Uploading…";
+    const fd = new FormData();
+    fd.append("file", file);
+    // Do NOT set Content-Type — the browser sets the multipart boundary.
+    const res = await fetch("/api/decks/upload", {
+      method: "POST",
+      headers: authHeaders(),
+      body: fd,
+    });
+    if (res.status === 401) return signOut();
+    const data = await res.json().catch(() => ({}));
+    if (msg) {
+      if (res.ok) {
+        msg.textContent = `Uploaded: ${data.title} → ${data.url} (${data.card_count} cards)`;
+      } else {
+        msg.textContent = `Error: ${data.detail ?? res.status}`;
+      }
+    }
+    if (res.ok) loadDecks();
+  }
+
+  function initAdmin() {
+    $("[data-unlock-form]")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = $<HTMLInputElement>("[data-token]");
+      const token = input?.value ?? "";
+      if (!token) return;
+      if (await unlock(token)) {
+        if (input) input.value = "";
+        showPanel();
+        loadDecks();
+      } else {
+        showLock("Invalid token.");
+      }
+    });
+
+    $("[data-upload-form]")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = $<HTMLInputElement>("[data-file]");
+      const file = input?.files?.[0];
+      if (file) upload(file).then(() => input && (input.value = ""));
+    });
+
+    $("[data-signout]")?.addEventListener("click", signOut);
+
+    // On load: if we already have a token, try the panel; otherwise lock.
+    if (sessionStorage.getItem(TOKEN_KEY)) {
+      showPanel();
+      loadDecks();
+    } else {
+      showLock();
+    }
+  }
+
+  initAdmin();
+</script>
+
+<style>
+  .admin {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3.5rem) 1.5rem;
+  }
+  .admin__title {
+    margin: 0;
+  }
+  .admin__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .admin__subhead {
+    margin: 2rem 0 0.75rem;
+    font-size: 1.1rem;
+    color: var(--vd-text-muted);
+  }
+  .admin__row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .admin__input,
+  .admin__file {
+    flex: 1;
+    min-width: 12rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .admin__btn {
+    padding: 0.6rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .admin__btn:hover {
+    filter: brightness(1.08);
+  }
+  .admin__link {
+    background: none;
+    border: 0;
+    color: var(--vd-text-muted);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+  }
+  .admin__err {
+    color: #f87171;
+    margin-top: 0.75rem;
+  }
+  .admin__msg {
+    color: var(--vd-text-muted);
+    margin-top: 0.75rem;
+    min-height: 1.4em;
+    word-break: break-word;
+  }
+  .admin__decks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .admin__deck {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+  }
+  .admin__deck-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .admin__deck-title {
+    color: var(--vd-text);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .admin__deck-title:hover {
+    color: var(--vd-accent);
+  }
+  .admin__deck-meta {
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+  }
+  .admin__del {
+    flex: none;
+    padding: 0.4rem 0.8rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: #f87171;
+    cursor: pointer;
+    font: inherit;
+  }
+  .admin__del:hover {
+    border-color: #f87171;
+  }
+  .admin__empty {
+    color: var(--vd-text-muted);
+  }
+</style>

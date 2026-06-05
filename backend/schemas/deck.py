@@ -46,3 +46,19 @@ class UploadResult(BaseModel):
     title: str
     card_count: int
     url: str  # reader path, e.g. /z13/the-12-houses
+
+
+class AdminDeckItem(BaseModel):
+    """A deck row for the admin management list.
+
+    Only public-equivalent fields (title/author/topic/slug/card_count) plus
+    the deterministically-derived filename — no owner or path info.
+    """
+
+    topic: str  # topic slug
+    slug: str
+    title: str
+    author: str
+    card_count: int
+    filename: str
+    url: str

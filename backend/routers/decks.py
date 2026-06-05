@@ -7,13 +7,21 @@ Retrieval re-parses the canonical file into cards on read.
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
 from models import User
-from schemas.deck import DeckDetail, UploadResult
+from schemas.deck import AdminDeckItem, DeckDetail, UploadResult
 from services import decks as decks_service
 from services.auth import get_current_user
 from services.indexing import index_deck_file, slugify
@@ -68,6 +76,15 @@ async def upload_deck(
     )
 
 
+@router.get("", response_model=list[AdminDeckItem])
+def list_decks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # auth gate
+) -> list[AdminDeckItem]:
+    """List all indexed decks (auth required) — for the admin surface."""
+    return decks_service.list_all_decks(db)
+
+
 @router.get("/{topic_slug}/{deck_slug}", response_model=DeckDetail)
 def get_deck(
     topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
@@ -77,3 +94,18 @@ def get_deck(
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     return deck
+
+
+@router.delete("/{topic_slug}/{deck_slug}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_deck(
+    topic_slug: str,
+    deck_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # auth gate
+) -> Response:
+    """Delete a deck: file + DB rows + orphan prune (auth required)."""
+    deleted = decks_service.delete_deck_by_slugs(db, topic_slug, deck_slug)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

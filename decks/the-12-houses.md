@@ -3,7 +3,7 @@ title: The 12 Houses
 author: Rob Wall
 topic: z13
 keywords: [houses, natal-chart, beginner]
-theme: z13-dark
+theme: operazione-stile
 description: A beginner-friendly introduction to the 12 houses in astrology.
 ---
 

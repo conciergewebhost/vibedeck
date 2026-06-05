@@ -15,6 +15,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://u:p@localhost/db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("UPLOAD_DIR", "/tmp")
+os.environ.setdefault("UPLOAD_TOKEN", "test-upload-token")
+os.environ.setdefault("UPLOAD_OWNER_EMAIL", "owner@example.com")
 
 import jwt  # noqa: E402
 

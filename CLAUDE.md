@@ -114,6 +114,8 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 | `UPLOAD_DIR` | Absolute path to deck file storage |
 | `BASE_URL` | Public URL of this instance |
 | `ENVIRONMENT` | `development` or `production` |
+| `UPLOAD_TOKEN` | Shared token for the `/admin` web upload surface — `openssl rand -hex 32` |
+| `UPLOAD_OWNER_EMAIL` | Account that token-gated and CLI uploads are attributed to |
 
 ---
 

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     BASE_URL: str = "http://localhost:4321"
     ENVIRONMENT: str = "development"
 
+    # Shared-token gate for the /admin web surface, and the account that
+    # token-gated (and CLI) uploads are attributed to. Required.
+    UPLOAD_TOKEN: str
+    UPLOAD_OWNER_EMAIL: str
+
     # JWT defaults — not in .env yet; promote to env vars if they need tuning.
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
