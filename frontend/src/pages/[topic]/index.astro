@@ -14,7 +14,7 @@ if (!data) {
 }
 ---
 
-<BaseLayout title={`${data.display_name} — Vibedeck`} theme={data.theme ?? "default"}>
+<BaseLayout title={`${data.display_name} — Vibedeck`} theme={data.theme ?? undefined}>
   <main class="topic">
     <a class="topic__back" href="/">‹ All topics</a>
     <h1>{data.display_name}</h1>

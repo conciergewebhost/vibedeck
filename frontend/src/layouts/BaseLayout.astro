@@ -24,7 +24,8 @@ interface Props {
   theme?: string;
 }
 
-const { title, theme = "default" } = Astro.props;
+// Site-wide default theme. Pages/decks may override via the `theme` prop.
+const { title, theme = "operazione-stile" } = Astro.props;
 
 // Resolve the requested theme; fall back to default for an unknown name.
 const themeHref =

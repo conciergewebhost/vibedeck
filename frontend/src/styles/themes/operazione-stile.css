@@ -285,3 +285,63 @@ body::before {
   color: var(--color-primary);
   letter-spacing: var(--tracking-wide);
 }
+
+/* ══════════════════════════════════════════
+   SITE INTEGRATION — master index (/) + topic index (/{topic})
+   Same approach: ancestor chains beat the pages' scoped styles so the
+   whole site carries the dossier treatment, not just the deck reader.
+══════════════════════════════════════════ */
+
+/* ── Master index ── */
+.home .home__head .home__title {
+  /* solid cream display type — drop the default gradient */
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--color-cream);
+  color: var(--color-cream);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.home .home__head .home__tag {
+  font-style: italic;
+  color: var(--color-muted);
+}
+.home .topic-list .topic-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-cream);
+}
+.home .topic-list .kw li {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  border-radius: var(--card-radius);
+}
+
+/* ── Topic index ── */
+.topic > h1 {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.topic a.topic__back {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.topic .deck-list .deck-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-cream);
+}
+.topic .deck-list .kw li {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  border-radius: var(--card-radius);
+}
