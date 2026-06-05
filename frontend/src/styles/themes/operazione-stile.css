@@ -63,6 +63,26 @@
   --transition-card: 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
+/* ── Light mode (toggled via <html data-mode="light">) ──────
+   Only the --color-* values flip (plus the two raw-valued tokens
+   --vd-nav-bg and --grain-opacity). The --vd-* mapping and every
+   component rule reference these, so the whole site inverts to a
+   warm "paper dossier" look with no rule duplication. */
+:root[data-mode="light"] {
+  --color-base:        #e9e0cd;   /* aged paper */
+  --color-surface:     #f3ecdb;   /* raised card */
+  --color-surface-alt: #ded2b9;
+  --color-border:      #c3b596;   /* warm tan */
+
+  --color-primary:     #b9531f;   /* deeper sienna for contrast on cream */
+  --color-cream:       #2a2018;   /* the ink — body text + headings */
+  --color-muted:       #6f6452;   /* secondary ink */
+  --color-highlight:   #a8551f;   /* emphasis */
+
+  --vd-nav-bg:     rgba(233, 224, 205, 0.9);
+  --grain-opacity: 0.045;
+}
+
 /* ══════════════════════════════════════════
    BASE
 ══════════════════════════════════════════ */
