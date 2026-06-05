@@ -21,7 +21,7 @@ npm-debug.log*
 # Decks are user content, not code: ignore everything under decks/
 # except the sample fixture that ships with the repo.
 decks/*.md
-!decks/the-12-houses.md
+!decks/vibedeck__what-is-vibedeck.md
 !decks/tradecraft-primer.md
 
 # ── Claude Code local settings ────────────────────────────────
