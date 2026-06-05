@@ -247,6 +247,8 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 - [ ] User-facing auth (login, profile, my decks)
 - [ ] Private/public deck toggle
 - [ ] Custom theme upload
+- [ ] Transition effects between cards
+- [ ] Optional progressive reveal of bullet points (one at a time)
 
 ### Post-v2
 - [ ] Multi-user publishing
