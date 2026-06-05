@@ -12,7 +12,7 @@ const { topic, deck } = Astro.params;
 const data = await fetchDeck(topic!, deck!);
 
 if (!data) {
-  return new Response("Deck not found", { status: 404 });
+  return Astro.rewrite("/404");
 }
 ---
 

@@ -1,0 +1,64 @@
+---
+/**
+ * NotFound — the themed "not found" body, shared by src/pages/404.astro
+ * (unmatched routes) and the topic/deck pages' not-found branches (via
+ * Astro.rewrite). Styled with --vd-* tokens so it carries whatever theme
+ * is active (operazione-stile by default).
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Not found — Vibedeck">
+  <main class="notfound">
+    <p class="notfound__code">404</p>
+    <h1 class="notfound__title">Dossier not found</h1>
+    <p class="notfound__msg">This file isn't in the archive.</p>
+    <a class="notfound__home" href="/">‹ Back to the index</a>
+  </main>
+</BaseLayout>
+
+<style>
+  .notfound {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3.5rem);
+  }
+  .notfound__code {
+    font-family: var(--vd-font-heading);
+    font-size: clamp(4rem, 18vw, 9rem);
+    line-height: 1;
+    letter-spacing: 0.08em;
+    color: var(--vd-accent);
+    margin: 0;
+  }
+  .notfound__title {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--vd-heading);
+    margin: 0.25rem 0 0.75rem;
+  }
+  .notfound__msg {
+    color: var(--vd-text-muted);
+    margin: 0 0 2rem;
+  }
+  .notfound__home {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--vd-text-muted);
+    text-decoration: none;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    padding: 0.6rem 1.1rem;
+  }
+  .notfound__home:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+</style>

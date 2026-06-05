@@ -10,7 +10,7 @@ const { topic } = Astro.params;
 const data = await fetchTopic(topic!);
 
 if (!data) {
-  return new Response("Topic not found", { status: 404 });
+  return Astro.rewrite("/404");
 }
 ---
 
