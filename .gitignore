@@ -22,6 +22,7 @@ npm-debug.log*
 # except the sample fixture that ships with the repo.
 decks/*.md
 !decks/the-12-houses.md
+!decks/tradecraft-primer.md
 
 # ── Claude Code local settings ────────────────────────────────
 .claude/settings.local.json
