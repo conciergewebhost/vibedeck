@@ -682,3 +682,161 @@ body::before {
   --vd-nav-bg: rgba(14, 12, 10, 0.92);
   --vd-progress: var(--color-muted);
 }
+
+/* ══════════════════════════════════════════
+   VIBEDECK READER INTEGRATION
+   Retargets the Operazione Stile treatment onto the reader's ACTUAL
+   component classes (.reader__*, .card-body--*). The `.reader__stage
+   .reader__card` / `.reader .reader__nav` ancestor chains reach (0,3,x)
+   specificity so these win over the components' Astro-scoped styles.
+══════════════════════════════════════════ */
+
+/* ── Title card ── */
+.reader__stage .reader__card .card-body--title {
+  text-align: left;
+}
+.reader__stage .reader__card .card-body--title::before {
+  content: "";
+  display: block;
+  width: 3rem;
+  height: var(--rule-weight);
+  background: var(--color-primary);
+  margin-bottom: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--title h1 {
+  /* undo the default theme's gradient-clipped text */
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--color-cream);
+  color: var(--color-cream);
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 11vw, var(--text-4xl));
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.reader__stage .reader__card .card-body--title h3 {
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-style: italic;
+  font-size: var(--text-lg);
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+  margin-top: var(--space-md);
+}
+
+/* ── Concept + Summary headings (display, uppercase, tracked) ── */
+.reader__stage .reader__card .card-body--concept h2,
+.reader__stage .reader__card .card-body--summary h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--concept em {
+  font-style: italic;
+  color: var(--color-highlight);
+}
+.reader__stage .reader__card .card-body--concept strong {
+  color: var(--color-cream);
+  font-weight: 600;
+}
+
+/* ── Summary card: accent rail + em-dash bullets ── */
+.reader__stage .reader__card .card-body--summary {
+  border-left: 2px solid var(--color-primary);
+  padding-left: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--summary h2 {
+  color: var(--color-primary);
+  letter-spacing: var(--tracking-wider);
+}
+.reader__stage .reader__card .card-body--summary ul {
+  list-style: none;
+  padding-left: 0;
+}
+.reader__stage .reader__card .card-body--summary li {
+  position: relative;
+  padding-left: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--summary li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--color-primary);
+}
+
+/* ── Quote card: oversized opening mark, no left rule ── */
+.reader__stage .reader__card .card-body--quote blockquote {
+  border-left: 0;
+  padding-left: 0;
+  padding-top: var(--space-xl);
+  position: relative;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-weight: 300;
+  color: var(--color-cream);
+}
+.reader__stage .reader__card .card-body--quote blockquote::before {
+  content: "\201C";
+  position: absolute;
+  top: -0.1em;
+  left: -0.05em;
+  font-family: var(--font-display);
+  font-size: 6rem;
+  line-height: 1;
+  color: var(--color-primary);
+  opacity: 0.4;
+}
+
+/* ── Graphic card: print filter + dossier caption ── */
+.reader__stage .reader__card .card-body--graphic img {
+  filter: contrast(1.05) brightness(0.95);
+}
+.reader__stage .reader__card .card-body--graphic em {
+  display: block;
+  font-style: normal;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border-top: var(--rule-weight) solid var(--color-border);
+  padding-top: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+/* ── Navigation chrome ── */
+.reader .reader__nav {
+  border-top: var(--rule-weight) solid var(--color-border);
+}
+.reader .reader__nav .reader__btn {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  border-radius: var(--card-radius);
+}
+.reader .reader__nav .reader__progress {
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+.reader .reader__nav .reader__progress [data-current] {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ── Index modal ── */
+.reader .reader__modal .reader__back {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.reader .reader__modal .reader__index-num {
+  font-family: var(--font-display);
+  color: var(--color-primary);
+  letter-spacing: var(--tracking-wide);
+}
