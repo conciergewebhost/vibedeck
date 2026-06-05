@@ -61,6 +61,9 @@ const themeHref =
     {/* Theme stylesheet — one file per theme, sets the --vd-* tokens.
         href is the bundled, hashed URL resolved above (not a raw path). */}
     <link rel="stylesheet" href={themeHref} />
+    {/* Optional per-page <head> additions (e.g. a deployment's analytics).
+        Pages opt in by passing content with slot="head"; most add nothing. */}
+    <slot name="head" />
   </head>
   <body>
     <button
