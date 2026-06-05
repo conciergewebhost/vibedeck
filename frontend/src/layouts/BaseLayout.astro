@@ -40,14 +40,21 @@ const themeHref =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
-    {/* Apply the saved dark/light mode before first paint (no flash). */}
+    {/* Apply the mode before first paint (no flash): a saved choice wins;
+        otherwise follow the OS, defaulting to light unless it explicitly
+        prefers dark. */}
     <script is:inline>
       (() => {
         try {
-          const m = localStorage.getItem("vd-mode");
-          document.documentElement.dataset.mode = m === "light" ? "light" : "dark";
+          let m = localStorage.getItem("vd-mode");
+          if (m !== "light" && m !== "dark") {
+            m = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          document.documentElement.dataset.mode = m;
         } catch (e) {
-          document.documentElement.dataset.mode = "dark";
+          document.documentElement.dataset.mode = "light";
         }
       })();
     </script>
