@@ -1,93 +1,333 @@
 ---
 /**
- * Landing page ( / ) — project intro for vibedeck.online.
- * Placeholder copy for now; links through to the deck library at /decks.
- * Uses the site default theme (operazione-stile).
+ * Landing page ( / ) — the public front door for vibedeck.online.
+ * Hardcoded marketing content (not deck-driven). Uses the site default
+ * theme (operazione-stile) and stays dark/light aware via --vd-* tokens.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
+
+const cardTypes = [
+  ["Title", "the opening card. Sets the tone before the content begins."],
+  [
+    "Concept",
+    "the workhorse. One idea, explained clearly. The constraint is doing its job.",
+  ],
+  [
+    "Summary",
+    "the consolidation card. Bullet points, big picture, breath before the next section.",
+  ],
+  ["Graphic", "full image or chart with a caption. For when a picture earns its place."],
+  ["Quote", "a pull quote, styled to land. Attribution optional."],
+];
+
+const features = [
+  [
+    "It's just markdown.",
+    "You write a plain text file. Vibedeck handles the rest. No proprietary formats, no software to install, no lock-in. Your content is always yours.",
+  ],
+  [
+    "It works everywhere.",
+    "Phone, tablet, desktop, projected screen. Swipe through on the train. Present it in a boardroom. The same deck works in both contexts without any adjustment.",
+  ],
+  [
+    "The constraint is the feature.",
+    "Every card holds one idea. That's not a limitation; it's the whole point. Forced clarity is the best editing tool there is.",
+  ],
+];
 ---
 
-<BaseLayout title="Vibedeck — digital index cards">
+<BaseLayout title="Vibedeck — knowledge, one card at a time">
   <main class="landing">
+    <!-- Hero -->
     <section class="landing__hero">
-      <h1 class="landing__title">Vibedeck</h1>
-      <p class="landing__tag">
-        Digital index cards. Chunked knowledge, beautifully delivered.
+      <h1 class="landing__headline">Knowledge, one card at a time.</h1>
+      <p class="landing__sub">
+        Vibedeck turns your markdown files into beautiful, paginated card decks.
+        Mobile-first. Distraction-free. Built for people who actually want to
+        learn something.
+      </p>
+      <a class="btn btn--primary" href="/decks">Browse the decks</a>
+    </section>
+
+    <!-- The pitch -->
+    <section class="landing__section landing__pitch">
+      <p>
+        You know that feeling when a presentation has forty-seven slides and
+        you're on slide three and you've already lost the thread?
+      </p>
+      <p class="landing__punch">Vibedeck doesn't do that.</p>
+      <p>
+        The mental model is the index card. One idea per card. Focused enough to
+        absorb. Sequenced to build understanding without overwhelm. It's how good
+        teachers have always taught; we just made it work on your phone.
       </p>
     </section>
 
-    <section class="landing__body">
-      <p>
-        Vibedeck turns plain markdown into beautiful, mobile-first card decks —
-        one focused idea per card, sequenced to build understanding without
-        overwhelm.
-      </p>
-      <p>
-        It isn't a slideshow. It's a reading experience: swipe through concept
-        cards, summaries, quotes, and diagrams, each dressed by a theme that
-        sets the mood.
-      </p>
-      <p>Open source, self-hostable, and authored entirely in markdown.</p>
+    <!-- Three things worth knowing -->
+    <section class="landing__section">
+      <h2 class="landing__h2">Three things worth knowing</h2>
+      <ul class="features">
+        {
+          features.map(([name, body]) => (
+            <li class="feature">
+              <h3 class="feature__name">{name}</h3>
+              <p class="feature__body">{body}</p>
+            </li>
+          ))
+        }
+      </ul>
     </section>
 
-    <a class="landing__cta" href="/decks">Browse the sample decks →</a>
+    <!-- Card types -->
+    <section class="landing__section">
+      <h2 class="landing__h2">Card types</h2>
+      <p class="landing__lead">
+        Vibedeck gives you five card types to work with in version one.
+      </p>
+      <dl class="cardtypes">
+        {
+          cardTypes.map(([name, desc]) => (
+            <div class="cardtype">
+              <dt class="cardtype__name">{name}</dt>
+              <dd class="cardtype__desc">{desc}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
 
-    <p class="landing__placeholder">
-      Placeholder landing page — full content coming soon.
-    </p>
+    <!-- Who it's for -->
+    <section class="landing__section">
+      <h2 class="landing__h2">Who it's for</h2>
+      <p>
+        Vibedeck is for anyone who needs to transfer knowledge without losing
+        people along the way.
+      </p>
+      <p>
+        Teachers building study materials. Trainers developing onboarding
+        content. Subject matter experts who have something worth explaining and
+        want it to land properly. Anyone who has looked at a wall of slides and
+        thought: there has to be a better way.
+      </p>
+      <p>
+        There is. It's 1960s Italian spy thriller meets indexed card file. You're
+        going to love it.
+      </p>
+    </section>
+
+    <!-- Open source -->
+    <section class="landing__section">
+      <h2 class="landing__h2">Open source</h2>
+      <p>
+        Vibedeck is open source under the MIT license. Clone it, deploy it, build
+        on it. Run your own instance for your own content on your own domain; your
+        deck content builds your authority, not ours.
+      </p>
+      <p>The code is the gift. What you do with it is up to you.</p>
+      <p>
+        <a
+          class="link"
+          href="https://github.com/conciergewebhost/vibedeck"
+          target="_blank"
+          rel="noopener"
+        >
+          View the repo on GitHub
+        </a>
+      </p>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="landing__section landing__final">
+      <h2 class="landing__h2">Ready to see how it works?</h2>
+      <p>
+        Start with the deck that explains Vibedeck using Vibedeck. It seemed like
+        the honest thing to do.
+      </p>
+      <a class="btn btn--primary" href="/vibedeck/what-is-vibedeck">
+        See it in action →
+      </a>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing__footer">
+      <p class="landing__credit">
+        Architectural decisions and editorial judgment by a human. Execution
+        assisted by a very carefully guided code djinni.
+      </p>
+      <p>
+        Built by
+        <a class="link" href="https://conciergewebhost.ca" target="_blank" rel="noopener">
+          Concierge Web Host</a> in a Starbucks in North Battleford,
+        Saskatchewan. Because location is overrated.
+      </p>
+    </footer>
   </main>
 </BaseLayout>
 
 <style>
   .landing {
-    max-width: 44rem;
+    max-width: 46rem;
     margin: 0 auto;
     padding: clamp(2.5rem, 9vw, 6rem) 1.5rem;
   }
-  .landing__title {
+
+  /* ── Hero ── */
+  .landing__headline {
     font-family: var(--vd-font-heading);
-    font-size: clamp(3rem, 13vw, 6rem);
-    line-height: 1.05;
+    font-size: clamp(2.75rem, 11vw, 5.5rem);
+    line-height: 1.04;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     color: var(--vd-heading);
-    margin: 0 0 0.5rem;
+    margin: 0 0 1rem;
   }
-  .landing__tag {
+  .landing__sub {
     color: var(--vd-text-muted);
-    font-size: clamp(1.05rem, 3.5vw, 1.35rem);
-    font-style: italic;
-    margin: 0 0 2.5rem;
+    font-size: clamp(1.05rem, 3.2vw, 1.3rem);
+    line-height: 1.6;
+    max-width: 36rem;
+    margin: 0 0 2rem;
   }
-  .landing__body {
-    font-size: 1.0625rem;
-    line-height: 1.7;
-    max-width: 38rem;
-  }
-  .landing__body p {
-    margin: 0 0 1.25rem;
-  }
-  .landing__cta {
+
+  /* ── Buttons ── */
+  .btn {
     display: inline-block;
-    margin-top: 1.5rem;
-    padding: 0.7rem 1.4rem;
     font-family: var(--vd-font-heading);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--vd-text);
     text-decoration: none;
+    padding: 0.7rem 1.5rem;
+    border-radius: var(--vd-radius);
+    border: 1px solid var(--vd-card-border);
+  }
+  .btn--primary {
+    background: var(--vd-accent);
+    color: var(--vd-bg);
+    border-color: var(--vd-accent);
+  }
+  .btn--primary:hover {
+    filter: brightness(1.08);
+  }
+
+  .link {
+    color: var(--vd-accent);
+    text-decoration: underline;
+  }
+
+  /* ── Sections ── */
+  .landing__section {
+    margin-top: clamp(3rem, 8vw, 5rem);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+  }
+  .landing__section p {
+    margin: 0 0 1.25rem;
+    max-width: 40rem;
+  }
+  .landing__h2 {
+    font-family: var(--vd-font-heading);
+    font-size: clamp(1.6rem, 5vw, 2.25rem);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--vd-heading);
+    margin: 0 0 1.25rem;
+  }
+  .landing__h2::before {
+    content: "";
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    background: var(--vd-accent);
+    margin-bottom: 1rem;
+  }
+  .landing__lead {
+    color: var(--vd-text-muted);
+  }
+
+  /* ── Pitch ── */
+  .landing__punch {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-size: clamp(1.5rem, 5vw, 2rem);
+    color: var(--vd-accent);
+    margin: 0 0 1.25rem;
+  }
+
+  /* ── Three things ── */
+  .features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
+  .feature {
+    padding: 1.25rem;
     border: 1px solid var(--vd-card-border);
     border-radius: var(--vd-radius);
     background: var(--vd-card-bg);
   }
-  .landing__cta:hover {
-    border-color: var(--vd-accent);
-    color: var(--vd-accent);
+  .feature__name {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--vd-heading);
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
   }
-  .landing__placeholder {
-    margin-top: 3rem;
-    font-size: 0.8rem;
+  .feature__body {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
     color: var(--vd-text-muted);
-    opacity: 0.7;
+  }
+
+  /* ── Card types ── */
+  .cardtypes {
+    margin: 1.5rem 0 0;
+  }
+  .cardtype {
+    display: grid;
+    grid-template-columns: 7rem 1fr;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--vd-card-border);
+  }
+  .cardtype__name {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--vd-accent);
+    font-size: 0.95rem;
+    padding-top: 0.1rem;
+  }
+  .cardtype__desc {
+    margin: 0;
+    color: var(--vd-text);
+  }
+  @media (max-width: 30rem) {
+    .cardtype {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+  }
+
+  /* ── Footer ── */
+  .landing__footer {
+    margin-top: clamp(3.5rem, 9vw, 6rem);
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--vd-card-border);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--vd-text-muted);
+  }
+  .landing__credit {
+    font-style: italic;
+    margin: 0 0 0.75rem;
+  }
+  .landing__footer p {
+    margin: 0 0 0.5rem;
   }
 </style>
