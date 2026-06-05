@@ -16,7 +16,7 @@ if (!data) {
 
 <BaseLayout title={`${data.display_name} — Vibedeck`} theme={data.theme ?? undefined}>
   <main class="topic">
-    <a class="topic__back" href="/">‹ All topics</a>
+    <a class="topic__back" href="/decks">‹ All decks</a>
     <h1>{data.display_name}</h1>
     {data.description && <p class="topic__desc">{data.description}</p>}
 

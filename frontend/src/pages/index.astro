@@ -1,109 +1,93 @@
 ---
 /**
- * Master index ( / ) — all topics, grouped, the entry point to the library.
- * Supersedes the public/index.html holding page.
+ * Landing page ( / ) — project intro for vibedeck.online.
+ * Placeholder copy for now; links through to the deck library at /decks.
+ * Uses the site default theme (operazione-stile).
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { fetchTopics } from "../lib/api";
-
-const topics = (await fetchTopics()) ?? [];
 ---
 
 <BaseLayout title="Vibedeck — digital index cards">
-  <main class="home">
-    <header class="home__head">
-      <h1 class="home__title">Vibedeck</h1>
-      <p class="home__tag">Digital index cards. Chunked knowledge, beautifully delivered.</p>
-    </header>
+  <main class="landing">
+    <section class="landing__hero">
+      <h1 class="landing__title">Vibedeck</h1>
+      <p class="landing__tag">
+        Digital index cards. Chunked knowledge, beautifully delivered.
+      </p>
+    </section>
 
-    {
-      topics.length === 0 ? (
-        <p class="home__empty">No topics yet.</p>
-      ) : (
-        <ul class="topic-list">
-          {topics.map((t) => (
-            <li class="topic-card">
-              <a href={`/${t.slug}`}>
-                <h2>{t.display_name}</h2>
-                <p class="topic-card__count">
-                  {t.deck_count} deck{t.deck_count === 1 ? "" : "s"}
-                </p>
-                {t.top_keywords.length > 0 && (
-                  <ul class="kw">
-                    {t.top_keywords.map((k) => (
-                      <li>{k}</li>
-                    ))}
-                  </ul>
-                )}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )
-    }
+    <section class="landing__body">
+      <p>
+        Vibedeck turns plain markdown into beautiful, mobile-first card decks —
+        one focused idea per card, sequenced to build understanding without
+        overwhelm.
+      </p>
+      <p>
+        It isn't a slideshow. It's a reading experience: swipe through concept
+        cards, summaries, quotes, and diagrams, each dressed by a theme that
+        sets the mood.
+      </p>
+      <p>Open source, self-hostable, and authored entirely in markdown.</p>
+    </section>
+
+    <a class="landing__cta" href="/decks">Browse the sample decks →</a>
+
+    <p class="landing__placeholder">
+      Placeholder landing page — full content coming soon.
+    </p>
   </main>
 </BaseLayout>
 
 <style>
-  .home {
-    max-width: 48rem;
+  .landing {
+    max-width: 44rem;
     margin: 0 auto;
-    padding: clamp(2rem, 8vw, 5rem) 1.5rem;
+    padding: clamp(2.5rem, 9vw, 6rem) 1.5rem;
   }
-  .home__title {
-    font-size: clamp(2.5rem, 10vw, 4.5rem);
+  .landing__title {
+    font-family: var(--vd-font-heading);
+    font-size: clamp(3rem, 13vw, 6rem);
+    line-height: 1.05;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--vd-heading);
     margin: 0 0 0.5rem;
-    letter-spacing: -0.03em;
-    background: linear-gradient(90deg, var(--vd-accent), var(--vd-accent-2));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
   }
-  .home__tag {
+  .landing__tag {
     color: var(--vd-text-muted);
+    font-size: clamp(1.05rem, 3.5vw, 1.35rem);
+    font-style: italic;
     margin: 0 0 2.5rem;
   }
-  .topic-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  .landing__body {
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    max-width: 38rem;
   }
-  .topic-card a {
-    display: block;
-    padding: 1.25rem;
+  .landing__body p {
+    margin: 0 0 1.25rem;
+  }
+  .landing__cta {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 0.7rem 1.4rem;
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--vd-text);
+    text-decoration: none;
     border: 1px solid var(--vd-card-border);
     border-radius: var(--vd-radius);
     background: var(--vd-card-bg);
-    color: inherit;
-    text-decoration: none;
   }
-  .topic-card a:hover {
+  .landing__cta:hover {
     border-color: var(--vd-accent);
+    color: var(--vd-accent);
   }
-  .topic-card h2 {
-    margin: 0 0 0.25rem;
-  }
-  .topic-card__count {
+  .landing__placeholder {
+    margin-top: 3rem;
+    font-size: 0.8rem;
     color: var(--vd-text-muted);
-    margin: 0 0 0.75rem;
-    font-size: 0.9rem;
-  }
-  .kw {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-  .kw li {
-    font-size: 0.75rem;
-    color: var(--vd-text-muted);
-    border: 1px solid var(--vd-card-border);
-    border-radius: 999px;
-    padding: 0.15rem 0.6rem;
+    opacity: 0.7;
   }
 </style>
