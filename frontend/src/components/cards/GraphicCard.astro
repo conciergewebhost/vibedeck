@@ -3,7 +3,7 @@
 interface Props { html: string; }
 const { html } = Astro.props;
 ---
-<div class="card-body card-body--graphic" set:html={html} />
+<div class="card-body card-body--graphic" data-card-type="graphic" set:html={html} />
 
 <style>
   .card-body--graphic {

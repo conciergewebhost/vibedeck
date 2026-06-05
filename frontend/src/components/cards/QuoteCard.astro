@@ -3,7 +3,7 @@
 interface Props { html: string; }
 const { html } = Astro.props;
 ---
-<div class="card-body card-body--quote" set:html={html} />
+<div class="card-body card-body--quote" data-card-type="quote" set:html={html} />
 
 <style>
   .card-body--quote :global(blockquote) {

@@ -3,4 +3,4 @@
 interface Props { html: string; }
 const { html } = Astro.props;
 ---
-<div class="card-body card-body--concept" set:html={html} />
+<div class="card-body card-body--concept" data-card-type="concept" set:html={html} />

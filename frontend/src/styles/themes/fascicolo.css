@@ -1,0 +1,397 @@
+/*
+ * Vibedeck Theme: Fascicolo
+ * The field report — companion to Operazione Stile, same universe, different
+ * angle. Where Operazione Stile is the sleek mission briefing, Fascicolo is
+ * the field report: aged paper, typewritten text, rubber stamps, government
+ * basement energy.
+ *
+ * Mood: a field report pulled from a manila folder in a government archive.
+ * The coffee ring on page three was already there when you got it.
+ *
+ * Dark/light: the manila "paper" palette (the hero look) is the LIGHT mode
+ * below; the base :root is a derived dim "archive at night" companion so the
+ * site-wide dark/light toggle stays functional.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@400;500;600&display=swap');
+
+:root {
+  /* ── Core palette — DARK companion ("the archive at night") ──
+     Derived from the light spec: backgrounds darkened, ink lightened to
+     aged cream, stamp red brightened for legibility on dark. */
+  --color-base:        #18130d;   /* dim basement */
+  --color-surface:     #221b12;   /* lifted dark kraft */
+  --color-surface-alt: #2b2218;
+  --color-border:      #4a4030;   /* dark aged edge */
+
+  --color-ink:         #e9dcbf;   /* aged-cream typewriter ink */
+  --color-stamp:       #cf4434;   /* brightened rubber-stamp red */
+  --color-olive:       #8a9472;   /* lifted bureaucratic olive */
+  --color-muted:       #9a8a64;   /* faded ink */
+
+  /* ── Typography ── */
+  --font-display: 'Special Elite', 'Courier Prime', 'Courier New', monospace;
+  --font-body:    'Courier Prime', 'Courier New', Courier, monospace;
+  --font-label:   'Barlow Condensed', 'Arial Narrow', sans-serif;
+
+  --text-xs:   0.72rem;
+  --text-sm:   0.85rem;
+  --text-base: 1rem;
+  --text-lg:   1.25rem;
+  --text-xl:   1.7rem;
+  --text-2xl:  2.3rem;
+  --text-3xl:  3.2rem;
+  --text-4xl:  4.6rem;
+
+  --leading-tight: 1.18;
+  --leading-body:  1.7;
+  --tracking-wide:  0.04em;
+  --tracking-wider: 0.18em;
+
+  /* ── Spacing ── */
+  --space-xs:  0.25rem;
+  --space-sm:  0.5rem;
+  --space-md:  1rem;
+  --space-lg:  1.75rem;
+  --space-xl:  3rem;
+  --space-2xl: 5rem;
+
+  /* ── Layout ── */
+  --card-max-width: 720px;
+  --card-radius:    1px;   /* essentially square — official forms */
+
+  /* ── Effects ── */
+  --grain-opacity: 0.08;   /* more pronounced than Operazione — earns it */
+  --rule-weight:   1px;
+  --rule-line:     rgba(233, 220, 191, 0.06);  /* ruled-paper lines (dark) */
+}
+
+/* ── Light mode — the hero manila "paper dossier" (spec) ───────── */
+:root[data-mode="light"] {
+  --color-base:        #f0e6c8;   /* manila paper */
+  --color-surface:     #d9cc9a;   /* kraft, slightly darker */
+  --color-surface-alt: #cdbf86;
+  --color-border:      #b8a87a;   /* aged paper edge */
+
+  --color-ink:         #1a1410;   /* warm near-black, typewriter ink */
+  --color-stamp:       #8b1a1a;   /* rubber-stamp red — CLASSIFIED */
+  --color-olive:       #4a5240;   /* bureaucratic olive */
+  --color-muted:       #6b5c3e;   /* faded ink */
+
+  --vd-nav-bg:   rgba(240, 230, 200, 0.9);
+  --grain-opacity: 0.06;
+  --rule-line:   rgba(26, 20, 16, 0.06);
+}
+
+/* ══════════════════════════════════════════
+   BASE
+══════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  min-height: 100%;
+  background-color: var(--color-base);
+  /* ruled-paper lines showing through (index pages; reader handles its own) */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent calc(1.7rem - var(--rule-weight)),
+    var(--rule-line) calc(1.7rem - var(--rule-weight)),
+    var(--rule-line) 1.7rem
+  );
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Pronounced grain — the film/paper texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 150px 150px;
+}
+
+/* ══════════════════════════════════════════
+   VIBEDECK CONTRACT MAPPING
+   --vd-* tokens the components consume → this theme's palette/fonts.
+══════════════════════════════════════════ */
+:root {
+  --vd-bg: var(--color-base);
+  --vd-card-bg: var(--color-surface);
+  --vd-card-border: var(--color-border);
+
+  --vd-text: var(--color-ink);
+  --vd-text-muted: var(--color-muted);
+  --vd-heading: var(--color-ink);
+
+  --vd-accent: var(--color-stamp);
+  --vd-accent-2: var(--color-olive);
+
+  --vd-font-body: var(--font-body);
+  --vd-font-heading: var(--font-display);
+  --vd-font-scale: 1;
+
+  --vd-card-max-width: var(--card-max-width);
+  --vd-card-padding: clamp(1.5rem, 6vw, 3.25rem);
+  --vd-radius: var(--card-radius);
+
+  --vd-nav-bg: rgba(24, 19, 13, 0.92);
+  --vd-progress: var(--color-muted);
+}
+
+/* ══════════════════════════════════════════
+   VIBEDECK READER INTEGRATION
+   Ancestor chains (.reader__stage .reader__card / .reader .reader__nav)
+   win over the components' scoped styles.
+══════════════════════════════════════════ */
+
+/* Ruled-paper lines behind the card content. */
+.reader__stage .reader__card .card-body {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent calc(1.7rem - var(--rule-weight)),
+    var(--rule-line) calc(1.7rem - var(--rule-weight)),
+    var(--rule-line) 1.7rem
+  );
+}
+
+/* Rubber-stamp card-type label (all but the title cover). */
+.reader__stage .reader__card .card-body[data-card-type]:not(.card-body--title)::before {
+  content: attr(data-card-type);
+  display: inline-block;
+  margin-bottom: var(--space-lg);
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: var(--text-xs);
+  color: var(--color-stamp);
+  border: 1.5px solid var(--color-stamp);
+  padding: 0.15rem 0.55rem 0.05rem;
+  transform: rotate(-2.5deg);
+  opacity: 0.9;
+}
+
+/* ── Title card ── */
+.reader__stage .reader__card .card-body--title {
+  text-align: left;
+}
+.reader__stage .reader__card .card-body--title::before {
+  content: "";
+  display: block;
+  width: 3.5rem;
+  height: 2px;
+  background: var(--color-stamp);
+  margin-bottom: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--title h1 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--color-ink);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 9vw, var(--text-4xl));
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-wide);
+}
+.reader__stage .reader__card .card-body--title h3 {
+  font-family: var(--font-body);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--text-lg);
+  color: var(--color-muted);
+  margin-top: var(--space-md);
+}
+
+/* ── Concept + Summary headings (worn typewriter display) ── */
+.reader__stage .reader__card .card-body--concept h2,
+.reader__stage .reader__card .card-body--summary h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-wide);
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-lg);
+  color: var(--color-ink);
+}
+.reader__stage .reader__card .card-body--concept em {
+  font-style: italic;
+  color: var(--color-stamp);
+}
+.reader__stage .reader__card .card-body--concept strong {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+/* ── Summary card: OLIVE left rule + olive em-dash bullets ── */
+.reader__stage .reader__card .card-body--summary {
+  border-left: 3px solid var(--color-olive);
+  padding-left: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--summary h2 {
+  color: var(--color-olive);
+}
+.reader__stage .reader__card .card-body--summary ul {
+  list-style: none;
+  padding-left: 0;
+}
+.reader__stage .reader__card .card-body--summary li {
+  position: relative;
+  padding-left: var(--space-lg);
+}
+.reader__stage .reader__card .card-body--summary li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--color-olive);
+}
+
+/* ── Quote card: large faded-red quotation mark ── */
+.reader__stage .reader__card .card-body--quote blockquote {
+  border-left: 0;
+  padding-left: 0;
+  padding-top: var(--space-xl);
+  position: relative;
+  font-family: var(--font-body);
+  font-style: italic;
+  color: var(--color-ink);
+}
+.reader__stage .reader__card .card-body--quote blockquote::before {
+  content: "\201C";
+  position: absolute;
+  top: -0.15em;
+  left: -0.04em;
+  font-family: var(--font-display);
+  font-size: 6.5rem;
+  line-height: 1;
+  color: var(--color-stamp);
+  opacity: 0.25;
+}
+
+/* ── Graphic card: print filter + filed-evidence caption ── */
+.reader__stage .reader__card .card-body--graphic img {
+  filter: contrast(1.05) brightness(0.97) sepia(0.12);
+}
+.reader__stage .reader__card .card-body--graphic em {
+  display: block;
+  font-family: var(--font-label);
+  font-style: normal;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border-top: var(--rule-weight) solid var(--color-border);
+  padding-top: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+/* ── Navigation chrome (bureaucratic labels) ── */
+.reader .reader__nav {
+  border-top: var(--rule-weight) solid var(--color-border);
+}
+.reader .reader__nav .reader__btn {
+  font-family: var(--font-label);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  border-radius: var(--card-radius);
+}
+.reader .reader__nav .reader__progress {
+  font-family: var(--font-label);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+/* Page counter reads like a document folio: "Pag. n / total" */
+.reader .reader__nav .reader__progress::before {
+  content: "Pag. ";
+}
+.reader .reader__nav .reader__progress [data-current] {
+  color: var(--color-stamp);
+  font-weight: 600;
+}
+
+/* ── Index modal ── */
+.reader .reader__modal .reader__back {
+  font-family: var(--font-label);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.reader .reader__modal .reader__index-num {
+  font-family: var(--font-display);
+  color: var(--color-stamp);
+}
+
+/* ══════════════════════════════════════════
+   SITE INTEGRATION — master index (/) + topic index (/{topic})
+══════════════════════════════════════════ */
+
+/* ── Master index ── */
+.home .home__head .home__title {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--color-ink);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+}
+.home .home__head .home__tag {
+  font-style: italic;
+  color: var(--color-muted);
+}
+.home .topic-list .topic-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-ink);
+}
+.home .topic-list .kw li {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  border-radius: var(--card-radius);
+}
+
+/* ── Topic index ── */
+.topic > h1 {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-wide);
+}
+.topic a.topic__back {
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-size: var(--text-sm);
+}
+.topic .deck-list .deck-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-ink);
+}
+.topic .deck-list .kw li {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  border-radius: var(--card-radius);
+}
