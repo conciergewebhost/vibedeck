@@ -1,0 +1,18 @@
+[Unit]
+Description=Vibedeck Astro SSR frontend (node)
+After=network-online.target vibedeck-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chronos
+WorkingDirectory=/home/chronos/sites/vibedeck/frontend
+Environment=HOST=127.0.0.1
+Environment=PORT=4322
+Environment=API_BASE_URL=http://127.0.0.1:8100
+ExecStart=/home/chronos/.nvm/versions/node/v24.15.0/bin/node ./dist/server/entry.mjs
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

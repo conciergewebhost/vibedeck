@@ -1,0 +1,23 @@
+# Concrete Caddy site block for the vibedeck.online deployment.
+# Installed into /etc/caddy/Caddyfile (replacing the old "coming soon"
+# file_server placeholder). The app runs as two localhost systemd services:
+#   vibedeck-api.service  -> 127.0.0.1:8100 (FastAPI)
+#   vibedeck-web.service  -> 127.0.0.1:4322 (Astro SSR)
+
+vibedeck.online {
+	encode zstd gzip
+
+	# API -> FastAPI backend
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8100
+	}
+
+	# Everything else -> Astro SSR node server
+	handle {
+		reverse_proxy 127.0.0.1:4322
+	}
+}
+
+www.vibedeck.online {
+	redir https://vibedeck.online{uri} permanent
+}
