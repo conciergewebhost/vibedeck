@@ -17,6 +17,16 @@ html, body {
 :root.vd-present {
   font-size: 150%;
 }
+/* The 150% root scales the body text up nicely, but it also inflates the
+   title's rem-based max cap, letting the big display heading balloon past the
+   card on long titles. Pin the title to a fixed pixel ceiling (unaffected by
+   the root scaling) and let over-long words wrap. Selectors cover the default
+   theme's scoped h1 and the operazione/fascicolo ancestor-chain overrides. */
+:root.vd-present .card-body--title h1,
+:root.vd-present .reader__stage .reader__card .card-body--title h1 {
+  font-size: clamp(2.25rem, 9vw, 124px);
+  overflow-wrap: break-word;
+}
 
 body {
   background: var(--vd-bg);

@@ -169,6 +169,7 @@ const total = deck.cards.length;
     align-items: center;
     justify-content: center;
     overflow-y: auto;
+    overflow-x: hidden; /* never let scaled content spill past the edges */
     padding: clamp(1.25rem, 5vw, 2.5rem);
   }
   .reader__card {
