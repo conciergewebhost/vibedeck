@@ -19,10 +19,12 @@ npm-debug.log*
 
 # ── Uploaded deck files ───────────────────────────────────────
 # Decks are user content, not code: ignore everything under decks/
-# except the sample fixture that ships with the repo.
+# except the sample fixtures + reference decks that ship with the repo.
 decks/*.md
 !decks/vibedeck__what-is-vibedeck.md
 !decks/tradecraft-primer.md
+!decks/vibedeck__anatomy-of-a-vibedeck-file.md
+!decks/vibedeck__crafting-a-vibedeck-theme.md
 
 # ── Claude Code local settings ────────────────────────────────
 .claude/settings.local.json
