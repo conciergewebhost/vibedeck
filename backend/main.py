@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import auth, decks, topics, users
+from routers import auth, decks, themes, topics, users
 
 app = FastAPI(
     title="Vibedeck API",
@@ -32,6 +32,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(topics.router, prefix="/api/topics", tags=["topics"])
 app.include_router(decks.router, prefix="/api/decks", tags=["decks"])
+app.include_router(themes.router, prefix="/api/themes", tags=["themes"])
 
 
 @app.get("/api/health", tags=["meta"])

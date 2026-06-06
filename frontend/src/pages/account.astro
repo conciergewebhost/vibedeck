@@ -4,8 +4,8 @@
  *
  * Session-gated client-side (redirects to /login without a session). Lists the
  * user's own decks as thumbnail cards via the shared DeckModal component; each
- * opens the expandable viewer (with owner Edit/Delete). Plus a "New deck"
- * entry point, the account email, and Log out.
+ * opens the expandable viewer (with owner Edit/Delete). Also: upload deck
+ * markdown and (private) theme CSS files, manage themes, and log out.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
@@ -20,12 +20,29 @@ import DeckModal from "../components/DeckModal.astro";
       </div>
       <div class="portal__actions">
         <a class="portal__btn" href="/account/edit">+ New deck</a>
+        <label class="portal__btn portal__btn--ghost">
+          Upload deck
+          <input type="file" accept=".md,text/markdown,.markdown" data-upload-deck hidden />
+        </label>
+        <label class="portal__btn portal__btn--ghost">
+          Upload theme
+          <input type="file" accept=".css,text/css" data-upload-theme hidden />
+        </label>
         <button class="portal__link" type="button" data-logout>Log out</button>
       </div>
     </header>
 
     <p class="portal__msg" data-msg role="status" hidden></p>
     <ul class="deckgrid" data-deck-list></ul>
+
+    <section class="portal__themes">
+      <h2 class="portal__subhead">My themes</h2>
+      <p class="portal__hint">
+        Private to you. Use one by setting <code>theme: its-name</code> in a deck's
+        frontmatter — it'll render for you, while others see the default theme.
+      </p>
+      <ul class="portal__theme-list" data-theme-list></ul>
+    </section>
   </main>
 
   <DeckModal />
@@ -56,6 +73,20 @@ import DeckModal from "../components/DeckModal.astro";
     if ((window as any).Vibedeck) cb();
     else document.addEventListener("vibedeck:ready", cb, { once: true });
   }
+  function setMsg(text: string, kind: "ok" | "err") {
+    const msg = $<HTMLElement>("[data-msg]");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.dataset.kind = kind;
+    msg.hidden = false;
+  }
+  const readText = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsText(file);
+    });
 
   async function loadMe() {
     const res = await fetch("/api/users/me", { headers: authHeaders() });
@@ -83,11 +114,116 @@ import DeckModal from "../components/DeckModal.astro";
     for (const d of decks) list.append(V.buildCard(d));
   }
 
+  async function uploadDeck(file: File) {
+    let markdown: string;
+    try {
+      markdown = await readText(file);
+    } catch {
+      return setMsg("Could not read that file.", "err");
+    }
+    const res = await fetch("/api/decks/mine", {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown }),
+    });
+    if (res.status === 401) return handle401();
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setMsg(`Uploaded “${data.title}”.`, "ok");
+      loadDecks();
+    } else {
+      setMsg(data.detail ?? `Upload failed (${res.status}).`, "err");
+    }
+  }
+
+  async function uploadTheme(file: File) {
+    let css: string;
+    try {
+      css = await readText(file);
+    } catch {
+      return setMsg("Could not read that file.", "err");
+    }
+    const name = file.name.replace(/\.css$/i, "");
+    const res = await fetch("/api/themes", {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name, css }),
+    });
+    if (res.status === 401) return handle401();
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setMsg(`Theme “${data.name}” uploaded.`, "ok");
+      loadThemes();
+    } else {
+      setMsg(data.detail ?? `Theme upload failed (${res.status}).`, "err");
+    }
+  }
+
+  async function loadThemes() {
+    const res = await fetch("/api/themes/mine", { headers: authHeaders() });
+    if (res.status === 401) return handle401();
+    const themes = await res.json();
+    renderThemes(themes);
+  }
+
+  function renderThemes(themes: { name: string; slug: string }[]) {
+    const list = $<HTMLUListElement>("[data-theme-list]");
+    if (!list) return;
+    list.replaceChildren();
+    if (themes.length === 0) {
+      const li = document.createElement("li");
+      li.className = "portal__empty";
+      li.textContent = "No themes yet. Upload a .css theme to use in your decks.";
+      list.append(li);
+      return;
+    }
+    for (const t of themes) {
+      const li = document.createElement("li");
+      li.className = "portal__theme";
+      const label = document.createElement("span");
+      label.className = "portal__theme-name";
+      label.textContent = t.name;
+      const slug = document.createElement("code");
+      slug.className = "portal__theme-slug";
+      slug.textContent = `theme: ${t.slug}`;
+      const del = document.createElement("button");
+      del.className = "portal__theme-del";
+      del.type = "button";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteTheme(t));
+      li.append(label, slug, del);
+      list.append(li);
+    }
+  }
+
+  async function deleteTheme(t: { name: string; slug: string }) {
+    if (!confirm(`Delete theme “${t.name}”?`)) return;
+    const res = await fetch(`/api/themes/mine/${encodeURIComponent(t.slug)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    if (res.status === 401) return handle401();
+    if (res.ok || res.status === 404) loadThemes();
+  }
+
   function initPortal() {
     requireSession();
     $("[data-logout]")?.addEventListener("click", logout);
+
+    const onPick = (sel: string, fn: (f: File) => void) => {
+      const input = $<HTMLInputElement>(sel);
+      input?.addEventListener("change", () => {
+        const file = input.files?.[0];
+        if (file) fn(file);
+        input.value = ""; // allow re-picking the same file
+      });
+    };
+    onPick("[data-upload-deck]", uploadDeck);
+    onPick("[data-upload-theme]", uploadTheme);
+
     document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
+    loadThemes();
     whenReady(loadDecks);
   }
 
@@ -119,12 +255,13 @@ import DeckModal from "../components/DeckModal.astro";
   .portal__actions {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
+    flex-wrap: wrap;
   }
   .portal__btn {
     padding: 0.55rem 1.1rem;
     background: var(--vd-accent);
-    border: 0;
+    border: 1px solid var(--vd-accent);
     border-radius: var(--vd-radius);
     color: var(--vd-bg);
     font: inherit;
@@ -135,6 +272,17 @@ import DeckModal from "../components/DeckModal.astro";
   .portal__btn:hover {
     filter: brightness(1.08);
   }
+  .portal__btn--ghost {
+    background: transparent;
+    color: var(--vd-text);
+    border-color: var(--vd-card-border);
+    font-weight: 500;
+  }
+  .portal__btn--ghost:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+    filter: none;
+  }
   .portal__link {
     background: none;
     border: 0;
@@ -144,10 +292,71 @@ import DeckModal from "../components/DeckModal.astro";
     text-decoration: underline;
   }
   .portal__msg {
-    color: #f87171;
     margin: 0 0 1rem;
+    line-height: 1.5;
+  }
+  .portal__msg[data-kind="ok"] {
+    color: var(--vd-accent);
+  }
+  .portal__msg[data-kind="err"] {
+    color: #f87171;
   }
   .portal__empty {
     color: var(--vd-text-muted);
+  }
+
+  /* ── Themes ── */
+  .portal__themes {
+    margin-top: clamp(2rem, 6vw, 3rem);
+    border-top: 1px solid var(--vd-card-border);
+    padding-top: 1.5rem;
+  }
+  .portal__subhead {
+    margin: 0 0 0.4rem;
+    font-size: 1.2rem;
+  }
+  .portal__hint {
+    margin: 0 0 1rem;
+    color: var(--vd-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .portal__theme-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .portal__theme {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+  }
+  .portal__theme-name {
+    font-weight: 600;
+    color: var(--vd-text);
+  }
+  .portal__theme-slug {
+    color: var(--vd-text-muted);
+    font-size: 0.8rem;
+  }
+  .portal__theme-del {
+    margin-left: auto;
+    padding: 0.35rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: #f87171;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+  }
+  .portal__theme-del:hover {
+    border-color: #f87171;
   }
 </style>

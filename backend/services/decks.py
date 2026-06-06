@@ -5,6 +5,7 @@ cards every read. This means editing a file is reflected immediately,
 with no card data to sync in the DB.
 """
 
+import re
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -23,6 +24,31 @@ class DeckConflict(Exception):
 
 class DeckNotOwned(Exception):
     """The deck exists but belongs to another user."""
+
+
+class DeckUnsafe(Exception):
+    """The deck markdown contains executable/code-like markup."""
+
+
+# Blatant code constructs rejected at create/edit/upload time. This is a
+# friendly early gate; the real protection is render-time HTML sanitization
+# (frontend lib/markdown.ts). Safe markup like <a href … download> still
+# passes — only scripts, embedders, and inline event handlers are blocked.
+_UNSAFE_MARKUP = re.compile(
+    r"<\s*(script|iframe|object|embed|style|link|meta|svg|math)\b"
+    r"|javascript:"
+    r"|\son[a-z]+\s*=\s*[\"']",
+    re.IGNORECASE,
+)
+
+
+def assert_safe_markup(markdown: str) -> None:
+    """Raise DeckUnsafe if the markdown carries code-like markup."""
+    if _UNSAFE_MARKUP.search(markdown):
+        raise DeckUnsafe(
+            "For safety, decks can't include scripts, embedded frames, or "
+            "inline event handlers. Plain markdown (and simple links) only."
+        )
 
 
 def _resolve_deck(db: Session, topic_slug: str, deck_slug: str) -> Deck | None:
@@ -167,9 +193,11 @@ def get_owned_deck_source(
 def create_user_deck(db: Session, owner_id: int, markdown: str) -> Deck:
     """Create a new deck owned by `owner_id` from raw markdown.
 
-    Raises DeckParseError on malformed markdown and DeckConflict if the
-    derived filename is already held by a different owner. Caller commits.
+    Raises DeckParseError on malformed markdown, DeckUnsafe on code-like
+    markup, and DeckConflict if the derived filename is already held by a
+    different owner. Caller commits.
     """
+    assert_safe_markup(markdown)  # raises DeckUnsafe
     parsed = parse_deck(markdown)  # raises DeckParseError
     filename = deck_filename(parsed.meta)
 
@@ -199,6 +227,7 @@ def update_user_deck(
     if deck.owner_id != owner_id:
         raise DeckNotOwned()
 
+    assert_safe_markup(markdown)  # raises DeckUnsafe
     old_filename = deck.filename
     parsed = parse_deck(markdown)  # raises DeckParseError
     new_filename = deck_filename(parsed.meta)

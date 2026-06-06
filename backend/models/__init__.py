@@ -7,7 +7,8 @@ to the imports below when you create them.
 
 from models.deck import Deck, deck_keywords
 from models.keyword import Keyword
+from models.theme import Theme
 from models.topic import Topic
 from models.user import User
 
-__all__ = ["User", "Topic", "Deck", "Keyword", "deck_keywords"]
+__all__ = ["User", "Topic", "Deck", "Keyword", "Theme", "deck_keywords"]

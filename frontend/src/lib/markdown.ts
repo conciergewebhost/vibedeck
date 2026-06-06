@@ -1,17 +1,36 @@
 /**
  * Markdown rendering for card bodies.
  *
- * Card bodies are raw markdown stored in the canonical deck file and are
- * authored by authenticated users (trusted content), so output is not
- * sanitised in v1. TODO(v2): sanitise if/when decks accept untrusted input.
+ * Decks can be uploaded by any signed-in user and are viewable publicly, so
+ * the rendered HTML is sanitised: scripts, event handlers, iframes, inline
+ * styles, etc. are stripped while safe markup (links incl. `download`, lists,
+ * images, emphasis, code, blockquotes) is kept. This is the real XSS guard;
+ * the backend additionally rejects blatant code at upload time.
  */
 
 import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
 
 marked.setOptions({ gfm: true, breaks: false });
 
+// Allowlist tuned to what card bodies legitimately use.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    "p", "br", "hr", "span", "div",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li",
+    "strong", "em", "b", "i", "del", "code", "pre", "blockquote",
+    "a", "img",
+    "table", "thead", "tbody", "tr", "th", "td",
+  ],
+  ALLOWED_ATTR: ["href", "title", "alt", "src", "download", "target", "rel"],
+  // Only allow safe URL schemes (no javascript:, etc.).
+  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#|data:image\/)/i,
+};
+
 export function renderMarkdown(md: string): string {
-  return marked.parse(md, { async: false }) as string;
+  const html = marked.parse(md, { async: false }) as string;
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
 }
 
 /**

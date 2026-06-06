@@ -27,3 +27,6 @@ class User(Base):
     decks: Mapped[list["Deck"]] = relationship(  # noqa: F821
         back_populates="owner"
     )
+    themes: Mapped[list["Theme"]] = relationship(  # noqa: F821
+        back_populates="owner"
+    )

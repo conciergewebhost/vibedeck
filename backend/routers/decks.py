@@ -33,7 +33,7 @@ from schemas.deck import (
 )
 from services import decks as decks_service
 from services.auth import get_current_user
-from services.decks import DeckConflict, DeckNotOwned
+from services.decks import DeckConflict, DeckNotOwned, DeckUnsafe
 from services.indexing import deck_filename, index_deck_file
 from services.parser import DeckParseError, parse_deck
 
@@ -160,6 +160,8 @@ def create_my_deck(
     """Create a new deck owned by the current user from raw markdown."""
     try:
         deck = decks_service.create_user_deck(db, current_user.id, body.markdown)
+    except DeckUnsafe as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
     except DeckConflict:
@@ -211,6 +213,8 @@ def update_my_deck(
         deck = decks_service.update_user_deck(
             db, current_user.id, topic_slug, deck_slug, body.markdown
         )
+    except DeckUnsafe as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
     except DeckNotOwned:
