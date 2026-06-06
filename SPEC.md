@@ -260,6 +260,12 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 - [ ] Analytics per deck (views, completion rate)
 - [x] Embeddable single-deck widget (`/embed/{topic}/{deck}` + an "Embed" button in the deck modal)
 
+### Editions
+
+Vibedeck is planned as three editions — **standalone**, **server**, and a private **commercial**
+build — from one open core. Architecture, per-edition gaps, and the decisions to make early (content
+namespacing, edition seam, open-core split) are in **`docs/EDITIONS.md`**.
+
 ---
 
 ## Local Development

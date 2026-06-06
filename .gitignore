@@ -26,6 +26,11 @@ decks/*.md
 !decks/vibedeck__anatomy-of-a-vibedeck-file.md
 !decks/vibedeck__crafting-a-vibedeck-theme.md
 
+# ── Local, box-specific docs (never committed) ────────────────
+# Operational notes + private commercial strategy; kept on the box only.
+HANDOFF.md
+EDITIONS-COMMERCIAL.md
+
 # ── Claude Code local settings ────────────────────────────────
 .claude/settings.local.json
 
