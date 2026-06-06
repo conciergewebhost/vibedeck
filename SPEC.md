@@ -242,11 +242,15 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 - [x] PostgreSQL schema: users, decks, topics, keywords
 
 ### v2
+- [x] User-facing auth (passwordless magic-link login, invite-gated signup, `/account` portal)
+- [x] Custom theme upload (per-user **private** themes) — _upload UI paused pending content moderation_
+- [x] Admin portal: view/delete any deck + monitor users (owner-only)
+- [ ] **Content moderation for user-submitted content** — SEO/link-abuse + hurtful/harmful detection.
+      Deck & theme *upload* UI on `/account` is disabled until this lands (see HANDOFF.md for the
+      design discussion). Admin can already view/delete any deck and monitor users.
 - [ ] Keyword filtering UI on deck index
 - [ ] Search across decks
-- [ ] User-facing auth (login, profile, my decks)
-- [ ] Private/public deck toggle
-- [ ] Custom theme upload
+- [ ] Private/public deck toggle _(all decks are public today)_
 - [ ] Transition effects between cards
 - [ ] Optional progressive reveal of bullet points (one at a time)
 
@@ -254,7 +258,7 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 - [ ] Multi-user publishing
 - [ ] Custom card type extensibility
 - [ ] Analytics per deck (views, completion rate)
-- [ ] Embeddable single-deck widget
+- [x] Embeddable single-deck widget (`/embed/{topic}/{deck}` + an "Embed" button in the deck modal)
 
 ---
 
