@@ -5,8 +5,6 @@ stores the canonical file under UPLOAD_DIR and indexes its metadata.
 Retrieval re-parses the canonical file into cards on read.
 """
 
-from pathlib import Path
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -18,7 +16,6 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from config import settings
 from database import get_db
 from models import User
 from schemas.deck import (
@@ -33,8 +30,7 @@ from schemas.deck import (
 )
 from services import decks as decks_service
 from services.auth import get_current_user
-from services.decks import DeckConflict, DeckNotOwned, DeckUnsafe
-from services.indexing import deck_filename, index_deck_file
+from services.decks import DeckConflict, DeckNotOwned, DeckTooLarge, DeckUnsafe
 from services.parser import DeckParseError, parse_deck
 
 router = APIRouter()
@@ -49,8 +45,18 @@ async def upload_deck(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UploadResult:
-    """Validate, store, and index an uploaded markdown deck (auth required)."""
+    """Validate, store, and index an uploaded markdown deck (auth required).
+
+    Delegates to create_user_deck so uploads get the same safety as the portal
+    editor: a size cap, the no-code guard, and a cross-user conflict check (a
+    user can't overwrite a deck owned by someone else).
+    """
     raw = await file.read()
+    if len(raw) > 256_000:  # bound memory/disk; see services.decks._MAX_DECK_BYTES
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Deck file is too large (256 KB max).",
+        )
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -59,23 +65,23 @@ async def upload_deck(
             detail="Deck file must be UTF-8 encoded text.",
         )
 
-    # Validate by parsing before we write anything to disk.
     try:
-        parsed = parse_deck(text)
+        deck = decks_service.create_user_deck(db, current_user.id, text)
+    except DeckTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+        )
+    except DeckUnsafe as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Malformed deck: {exc}",
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Malformed deck: {exc}"
         )
-
-    # Generate a safe filename from frontmatter (never trust the upload's
-    # own filename); topic + title slugs keep it unique and human-readable.
-    filename = deck_filename(parsed.meta)
-
-    path = Path(settings.UPLOAD_DIR) / filename
-    path.write_text(text, encoding="utf-8")
-
-    deck = index_deck_file(db, filename=filename, owner_id=current_user.id)
+    except DeckConflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A deck with this topic and title already exists.",
+        )
     db.commit()
 
     return UploadResult(
@@ -160,6 +166,8 @@ def create_my_deck(
     """Create a new deck owned by the current user from raw markdown."""
     try:
         deck = decks_service.create_user_deck(db, current_user.id, body.markdown)
+    except DeckTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
     except DeckUnsafe as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except DeckParseError as exc:
@@ -213,6 +221,8 @@ def update_my_deck(
         deck = decks_service.update_user_deck(
             db, current_user.id, topic_slug, deck_slug, body.markdown
         )
+    except DeckTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
     except DeckUnsafe as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except DeckParseError as exc:

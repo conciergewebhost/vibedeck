@@ -30,6 +30,20 @@ class DeckUnsafe(Exception):
     """The deck markdown contains executable/code-like markup."""
 
 
+class DeckTooLarge(Exception):
+    """The deck markdown exceeds the size limit."""
+
+
+# Decks are small documents; cap to bound memory/disk from any single upload.
+_MAX_DECK_BYTES = 256_000
+
+
+def assert_deck_size(markdown: str) -> None:
+    """Raise DeckTooLarge if the markdown is over the size limit."""
+    if len(markdown.encode("utf-8")) > _MAX_DECK_BYTES:
+        raise DeckTooLarge("This deck is too large (256 KB max).")
+
+
 # Blatant code constructs rejected at create/edit/upload time. This is a
 # friendly early gate; the real protection is render-time HTML sanitization
 # (frontend lib/markdown.ts). Safe markup like <a href … download> still
@@ -197,6 +211,7 @@ def create_user_deck(db: Session, owner_id: int, markdown: str) -> Deck:
     markup, and DeckConflict if the derived filename is already held by a
     different owner. Caller commits.
     """
+    assert_deck_size(markdown)  # raises DeckTooLarge
     assert_safe_markup(markdown)  # raises DeckUnsafe
     parsed = parse_deck(markdown)  # raises DeckParseError
     filename = deck_filename(parsed.meta)
@@ -227,6 +242,7 @@ def update_user_deck(
     if deck.owner_id != owner_id:
         raise DeckNotOwned()
 
+    assert_deck_size(markdown)  # raises DeckTooLarge
     assert_safe_markup(markdown)  # raises DeckUnsafe
     old_filename = deck.filename
     parsed = parse_deck(markdown)  # raises DeckParseError
