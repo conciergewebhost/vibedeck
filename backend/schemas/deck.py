@@ -23,6 +23,21 @@ class PreviewInput(BaseModel):
     markdown: str
 
 
+class SaveDeckInput(BaseModel):
+    """Body for creating/replacing an owned deck from the portal editor."""
+
+    markdown: str
+
+
+class DeckSource(BaseModel):
+    """An owned deck's raw markdown, for loading into the portal editor."""
+
+    topic: str
+    slug: str
+    title: str
+    markdown: str
+
+
 class DeckListItem(BaseModel):
     """A deck as it appears in a topic listing."""
 

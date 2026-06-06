@@ -19,16 +19,17 @@ let error: string | null = null;
 let theme = "operazione-stile";
 
 if (Astro.request.method === "POST") {
-  // Sent as JSON by the sandbox editor (see /sandbox) to avoid Astro's
-  // form-content-type CSRF check behind the proxy.
+  // Sent as JSON by the editors (see /sandbox and /account/edit) to avoid
+  // Astro's form-content-type CSRF check behind the proxy.
   const payload = await Astro.request.json().catch(() => ({}));
   const markdown = typeof payload.markdown === "string" ? payload.markdown : "";
   const requested = typeof payload.theme === "string" ? payload.theme : "";
-  if (ALLOWED_THEMES.has(requested)) theme = requested;
 
   const result = await previewDeck(markdown);
   if (result.ok) {
-    // Stamp the chosen theme onto the deck so the reader matches the editor.
+    // An explicit theme wins (the sandbox theme picker); otherwise fall back
+    // to the deck's own frontmatter theme (the portal editor sends none).
+    theme = ALLOWED_THEMES.has(requested) ? requested : result.deck.theme;
     deck = { ...result.deck, theme };
   } else {
     error = result.error;

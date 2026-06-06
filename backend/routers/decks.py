@@ -21,10 +21,19 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import User
-from schemas.deck import AdminDeckItem, Card, DeckDetail, PreviewInput, UploadResult
+from schemas.deck import (
+    AdminDeckItem,
+    Card,
+    DeckDetail,
+    DeckSource,
+    PreviewInput,
+    SaveDeckInput,
+    UploadResult,
+)
 from services import decks as decks_service
 from services.auth import get_current_user
-from services.indexing import index_deck_file, slugify
+from services.decks import DeckConflict, DeckNotOwned
+from services.indexing import deck_filename, index_deck_file
 from services.parser import DeckParseError, parse_deck
 
 router = APIRouter()
@@ -58,11 +67,9 @@ async def upload_deck(
             detail=f"Malformed deck: {exc}",
         )
 
-    meta = parsed.meta
     # Generate a safe filename from frontmatter (never trust the upload's
-    # own filename). topic + title slugs keep it unique and human-readable;
-    # re-uploading the same deck refreshes it in place.
-    filename = f"{slugify(str(meta['topic']))}__{slugify(str(meta['title']))}.md"
+    # own filename); topic + title slugs keep it unique and human-readable.
+    filename = deck_filename(parsed.meta)
 
     path = Path(settings.UPLOAD_DIR) / filename
     path.write_text(text, encoding="utf-8")
@@ -121,6 +128,121 @@ def list_decks(
 ) -> list[AdminDeckItem]:
     """List all indexed decks (auth required) — for the admin surface."""
     return decks_service.list_all_decks(db)
+
+
+# ── Owner-scoped portal endpoints (session-authed, own decks only) ────────
+# Registered before the public /{topic}/{deck} routes; "mine" + nested paths
+# don't collide with the two-segment reader path.
+
+
+@router.get("/mine", response_model=list[AdminDeckItem])
+def list_my_decks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AdminDeckItem]:
+    """List the decks owned by the current user."""
+    return decks_service.list_user_decks(db, current_user.id)
+
+
+@router.post("/mine", response_model=UploadResult, status_code=status.HTTP_201_CREATED)
+def create_my_deck(
+    body: SaveDeckInput,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UploadResult:
+    """Create a new deck owned by the current user from raw markdown."""
+    try:
+        deck = decks_service.create_user_deck(db, current_user.id, body.markdown)
+    except DeckParseError as exc:
+        raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
+    except DeckConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="A deck with this topic and title already exists.",
+        )
+    db.commit()
+    return UploadResult(
+        topic=deck.topic.slug,
+        slug=deck.slug,
+        title=deck.title,
+        card_count=deck.card_count,
+        url=f"/{deck.topic.slug}/{deck.slug}",
+    )
+
+
+@router.get("/mine/{topic_slug}/{deck_slug}", response_model=DeckSource)
+def get_my_deck_source(
+    topic_slug: str,
+    deck_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DeckSource:
+    """Return an owned deck's raw markdown, for the editor."""
+    try:
+        markdown = decks_service.get_owned_deck_source(
+            db, current_user.id, topic_slug, deck_slug
+        )
+    except DeckNotOwned:
+        raise HTTPException(status_code=403, detail="This deck isn't yours.")
+    if markdown is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return DeckSource(
+        topic=topic_slug, slug=deck_slug, title=deck_slug, markdown=markdown
+    )
+
+
+@router.put("/mine/{topic_slug}/{deck_slug}", response_model=UploadResult)
+def update_my_deck(
+    topic_slug: str,
+    deck_slug: str,
+    body: SaveDeckInput,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UploadResult:
+    """Replace an owned deck's markdown (handles a title/topic rename)."""
+    try:
+        deck = decks_service.update_user_deck(
+            db, current_user.id, topic_slug, deck_slug, body.markdown
+        )
+    except DeckParseError as exc:
+        raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
+    except DeckNotOwned:
+        raise HTTPException(status_code=403, detail="This deck isn't yours.")
+    except DeckConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="A deck with this topic and title already exists.",
+        )
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    db.commit()
+    return UploadResult(
+        topic=deck.topic.slug,
+        slug=deck.slug,
+        title=deck.title,
+        card_count=deck.card_count,
+        url=f"/{deck.topic.slug}/{deck.slug}",
+    )
+
+
+@router.delete("/mine/{topic_slug}/{deck_slug}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_deck(
+    topic_slug: str,
+    deck_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Delete an owned deck (file + index)."""
+    try:
+        deleted = decks_service.delete_user_deck(
+            db, current_user.id, topic_slug, deck_slug
+        )
+    except DeckNotOwned:
+        raise HTTPException(status_code=403, detail="This deck isn't yours.")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{topic_slug}/{deck_slug}", response_model=DeckDetail)

@@ -1,0 +1,281 @@
+---
+/**
+ * /account — the logged-in user's deck portal.
+ *
+ * Session-gated client-side (redirects to /login without a session). Lists
+ * the user's own decks with view / edit / delete, a "New deck" entry point,
+ * and a log-out control. All API calls carry the vd_session JWT as a Bearer
+ * header; a 401 clears the session and bounces to /login. Framework-free,
+ * mirroring admin.astro but scoped to the signed-in user.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="My decks — Vibedeck">
+  <main class="portal">
+    <header class="portal__head">
+      <div>
+        <h1 class="portal__title">My decks</h1>
+        <p class="portal__email" data-email></p>
+      </div>
+      <div class="portal__actions">
+        <a class="portal__btn" href="/account/edit">+ New deck</a>
+        <button class="portal__link" type="button" data-logout>Log out</button>
+      </div>
+    </header>
+
+    <p class="portal__msg" data-msg role="status" hidden></p>
+    <ul class="portal__decks" data-deck-list></ul>
+  </main>
+</BaseLayout>
+
+<script>
+  const SESSION_KEY = "vd_session";
+
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+
+  type MyDeck = {
+    topic: string;
+    slug: string;
+    title: string;
+    author: string;
+    card_count: number;
+    url: string;
+  };
+
+  function jwt(): string | null {
+    return localStorage.getItem(SESSION_KEY);
+  }
+
+  function requireSession(): string {
+    const token = jwt();
+    if (!token) {
+      location.replace("/login");
+      throw new Error("no session");
+    }
+    return token;
+  }
+
+  function authHeaders(): Record<string, string> {
+    return { Authorization: `Bearer ${jwt()}` };
+  }
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    location.replace("/login");
+  }
+
+  function handle401() {
+    localStorage.removeItem(SESSION_KEY);
+    location.replace("/login");
+  }
+
+  async function loadMe() {
+    const res = await fetch("/api/users/me", { headers: authHeaders() });
+    if (res.status === 401) return handle401();
+    const me = await res.json();
+    const el = $<HTMLElement>("[data-email]");
+    if (el) el.textContent = me.email ?? "";
+  }
+
+  async function loadDecks() {
+    const res = await fetch("/api/decks/mine", { headers: authHeaders() });
+    if (res.status === 401) return handle401();
+    const decks: MyDeck[] = await res.json();
+    renderDecks(decks);
+  }
+
+  function renderDecks(decks: MyDeck[]) {
+    const list = $<HTMLUListElement>("[data-deck-list]");
+    if (!list) return;
+    list.replaceChildren();
+    if (decks.length === 0) {
+      const li = document.createElement("li");
+      li.className = "portal__empty";
+      li.textContent = "You haven't created any decks yet. Start with “+ New deck”.";
+      list.append(li);
+      return;
+    }
+    for (const d of decks) {
+      const li = document.createElement("li");
+      li.className = "portal__deck";
+
+      const info = document.createElement("div");
+      info.className = "portal__deck-info";
+      const title = document.createElement("span");
+      title.className = "portal__deck-title";
+      title.textContent = d.title;
+      const meta = document.createElement("span");
+      meta.className = "portal__deck-meta";
+      meta.textContent = `${d.card_count} cards · /${d.topic}/${d.slug}`;
+      info.append(title, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "portal__deck-actions";
+
+      const view = document.createElement("a");
+      view.className = "portal__action";
+      view.href = d.url;
+      view.target = "_blank";
+      view.rel = "noopener";
+      view.textContent = "View";
+
+      const edit = document.createElement("a");
+      edit.className = "portal__action";
+      edit.href = `/account/edit?topic=${encodeURIComponent(d.topic)}&deck=${encodeURIComponent(d.slug)}`;
+      edit.textContent = "Edit";
+
+      const del = document.createElement("button");
+      del.className = "portal__action portal__action--danger";
+      del.type = "button";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteDeck(d));
+
+      actions.append(view, edit, del);
+      li.append(info, actions);
+      list.append(li);
+    }
+  }
+
+  async function deleteDeck(d: MyDeck) {
+    if (!confirm(`Delete “${d.title}”? This removes the deck and its file.`)) return;
+    const res = await fetch(
+      `/api/decks/mine/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
+      { method: "DELETE", headers: authHeaders() },
+    );
+    if (res.status === 401) return handle401();
+    if (res.ok || res.status === 404) {
+      loadDecks();
+    } else {
+      const msg = $<HTMLElement>("[data-msg]");
+      if (msg) {
+        msg.textContent = "Could not delete that deck.";
+        msg.hidden = false;
+      }
+    }
+  }
+
+  function initPortal() {
+    requireSession();
+    $("[data-logout]")?.addEventListener("click", logout);
+    loadMe();
+    loadDecks();
+  }
+
+  initPortal();
+</script>
+
+<style>
+  .portal {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3rem) 1.5rem;
+  }
+  .portal__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .portal__title {
+    margin: 0;
+  }
+  .portal__email {
+    margin: 0.25rem 0 0;
+    color: var(--vd-text-muted);
+    font-size: 0.9rem;
+  }
+  .portal__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .portal__btn {
+    padding: 0.55rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .portal__btn:hover {
+    filter: brightness(1.08);
+  }
+  .portal__link {
+    background: none;
+    border: 0;
+    color: var(--vd-text-muted);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+  }
+  .portal__msg {
+    color: #f87171;
+    margin: 0 0 1rem;
+  }
+  .portal__decks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .portal__deck {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    flex-wrap: wrap;
+  }
+  .portal__deck-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .portal__deck-title {
+    font-weight: 600;
+    color: var(--vd-text);
+  }
+  .portal__deck-meta {
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+  }
+  .portal__deck-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex: none;
+  }
+  .portal__action {
+    padding: 0.4rem 0.8rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .portal__action:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .portal__action--danger {
+    color: #f87171;
+  }
+  .portal__action--danger:hover {
+    border-color: #f87171;
+    color: #f87171;
+  }
+  .portal__empty {
+    color: var(--vd-text-muted);
+  }
+</style>

@@ -13,16 +13,30 @@ from sqlalchemy.orm import Session
 from config import settings
 from models import Deck, Keyword, Topic, deck_keywords
 from schemas.deck import AdminDeckItem, Card, DeckDetail
+from services.indexing import deck_filename, index_deck_file
 from services.parser import parse_deck
 
 
-def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
-    """Return deck metadata + freshly parsed cards, or None if not found."""
-    deck = db.scalar(
+class DeckConflict(Exception):
+    """A different owner already holds the deck at the derived filename."""
+
+
+class DeckNotOwned(Exception):
+    """The deck exists but belongs to another user."""
+
+
+def _resolve_deck(db: Session, topic_slug: str, deck_slug: str) -> Deck | None:
+    """Look up a Deck by its URL slugs, or None."""
+    return db.scalar(
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
         .where(Topic.slug == topic_slug, Deck.slug == deck_slug)
     )
+
+
+def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
+    """Return deck metadata + freshly parsed cards, or None if not found."""
+    deck = _resolve_deck(db, topic_slug, deck_slug)
     if deck is None:
         return None
 
@@ -69,13 +83,122 @@ def delete_deck_by_slugs(db: Session, topic_slug: str, deck_slug: str) -> bool:
     Removes the DB row, prunes now-orphaned keywords and the topic if it is
     left empty, and unlinks the canonical file. The caller owns the commit.
     """
-    deck = db.scalar(
-        select(Deck)
-        .join(Topic, Deck.topic_id == Topic.id)
-        .where(Topic.slug == topic_slug, Deck.slug == deck_slug)
-    )
+    deck = _resolve_deck(db, topic_slug, deck_slug)
     if deck is None:
         return False
+    _delete_deck(db, deck)
+    return True
+
+
+# ── Owner-scoped operations (the per-user portal) ─────────────────────────
+# These enforce that a deck belongs to the acting user, so a logged-in user
+# can only see and mutate their own decks. The shared-token admin surface
+# keeps using the unscoped helpers above.
+
+
+def list_user_decks(db: Session, owner_id: int) -> list[AdminDeckItem]:
+    """Decks owned by `owner_id`, for the user's portal list."""
+    decks = db.scalars(
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .where(Deck.owner_id == owner_id)
+        .order_by(Topic.slug, Deck.slug)
+    ).all()
+    return [
+        AdminDeckItem(
+            topic=d.topic.slug,
+            slug=d.slug,
+            title=d.title,
+            author=d.author,
+            card_count=d.card_count,
+            filename=d.filename,
+            url=f"/{d.topic.slug}/{d.slug}",
+        )
+        for d in decks
+    ]
+
+
+def get_owned_deck_source(
+    db: Session, owner_id: int, topic_slug: str, deck_slug: str
+) -> str | None:
+    """Raw markdown of an owned deck, or None if it doesn't exist.
+
+    Raises DeckNotOwned if the deck exists but belongs to someone else.
+    """
+    deck = _resolve_deck(db, topic_slug, deck_slug)
+    if deck is None:
+        return None
+    if deck.owner_id != owner_id:
+        raise DeckNotOwned()
+    return (Path(settings.UPLOAD_DIR) / deck.filename).read_text(encoding="utf-8")
+
+
+def create_user_deck(db: Session, owner_id: int, markdown: str) -> Deck:
+    """Create a new deck owned by `owner_id` from raw markdown.
+
+    Raises DeckParseError on malformed markdown and DeckConflict if the
+    derived filename is already held by a different owner. Caller commits.
+    """
+    parsed = parse_deck(markdown)  # raises DeckParseError
+    filename = deck_filename(parsed.meta)
+
+    existing = db.scalar(select(Deck).where(Deck.filename == filename))
+    if existing is not None and existing.owner_id != owner_id:
+        raise DeckConflict()
+
+    (Path(settings.UPLOAD_DIR) / filename).write_text(markdown, encoding="utf-8")
+    return index_deck_file(db, filename=filename, owner_id=owner_id)
+
+
+def update_user_deck(
+    db: Session, owner_id: int, topic_slug: str, deck_slug: str, markdown: str
+) -> Deck | None:
+    """Replace an owned deck's markdown. Returns None if it doesn't exist.
+
+    If the new frontmatter changes the title/topic (and thus the canonical
+    filename), the deck is effectively renamed: the new file is written and
+    indexed, then the old file + rows are pruned. Raises DeckNotOwned if the
+    deck belongs to someone else, DeckParseError on malformed markdown, and
+    DeckConflict if the new filename collides with another owner's deck.
+    Caller commits.
+    """
+    deck = _resolve_deck(db, topic_slug, deck_slug)
+    if deck is None:
+        return None
+    if deck.owner_id != owner_id:
+        raise DeckNotOwned()
+
+    old_filename = deck.filename
+    parsed = parse_deck(markdown)  # raises DeckParseError
+    new_filename = deck_filename(parsed.meta)
+
+    if new_filename != old_filename:
+        clash = db.scalar(select(Deck).where(Deck.filename == new_filename))
+        if clash is not None and clash.owner_id != owner_id:
+            raise DeckConflict()
+
+    (Path(settings.UPLOAD_DIR) / new_filename).write_text(markdown, encoding="utf-8")
+    updated = index_deck_file(db, filename=new_filename, owner_id=owner_id)
+
+    if new_filename != old_filename:
+        old = db.scalar(select(Deck).where(Deck.filename == old_filename))
+        if old is not None:
+            _delete_deck(db, old)
+    return updated
+
+
+def delete_user_deck(
+    db: Session, owner_id: int, topic_slug: str, deck_slug: str
+) -> bool:
+    """Delete an owned deck. Returns False if not found.
+
+    Raises DeckNotOwned if the deck belongs to someone else. Caller commits.
+    """
+    deck = _resolve_deck(db, topic_slug, deck_slug)
+    if deck is None:
+        return False
+    if deck.owner_id != owner_id:
+        raise DeckNotOwned()
     _delete_deck(db, deck)
     return True
 

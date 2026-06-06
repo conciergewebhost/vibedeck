@@ -1,0 +1,282 @@
+---
+/**
+ * /account/edit — create or edit one of the signed-in user's decks.
+ *
+ *   /account/edit                       → create a new deck (prefilled sample)
+ *   /account/edit?topic=…&deck=…        → edit an existing owned deck
+ *
+ * Markdown editor on the left, live preview on the right (the same
+ * /sandbox/preview render path, which honours the deck's frontmatter theme).
+ * Saving POSTs (create) or PUTs (edit) to the owner-scoped /api/decks/mine
+ * endpoints with the vd_session bearer token, then returns to the portal.
+ * Session-gated client-side, framework-free.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const SAMPLE = `---
+title: My New Deck
+author: You
+topic: my-topic
+keywords: [example]
+theme: operazione-stile
+description: A new deck — edit me!
+---
+---
+type: title
+---
+# My New Deck
+### A fresh start
+---
+type: concept
+---
+## First idea
+
+One focused idea per card.
+`;
+---
+
+<BaseLayout title="Edit deck — Vibedeck">
+  <main class="editor">
+    <header class="editor__head">
+      <h1 class="editor__title" data-title>New deck</h1>
+      <div class="editor__actions">
+        <a class="editor__link" href="/account">‹ Back to my decks</a>
+        <button class="editor__btn" type="button" data-save>Save</button>
+      </div>
+    </header>
+
+    <p class="editor__msg" data-msg role="status" hidden></p>
+
+    <div class="editor__grid">
+      <section class="editor__pane">
+        <textarea
+          class="editor__textarea"
+          data-markdown
+          spellcheck="false"
+          aria-label="Deck markdown"></textarea>
+      </section>
+      <section class="editor__pane">
+        <iframe class="editor__iframe" data-preview title="Deck preview"></iframe>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<script is:inline define:vars={{ SAMPLE }}>
+  window.__VD_SAMPLE = SAMPLE;
+</script>
+
+<script>
+  const SESSION_KEY = "vd_session";
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+
+  function jwt(): string | null {
+    return localStorage.getItem(SESSION_KEY);
+  }
+  function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return { Authorization: `Bearer ${jwt()}`, ...extra };
+  }
+  function handle401() {
+    localStorage.removeItem(SESSION_KEY);
+    location.replace("/login");
+  }
+  function setMsg(text: string, kind: "ok" | "err") {
+    const msg = $<HTMLElement>("[data-msg]");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.dataset.kind = kind;
+    msg.hidden = false;
+  }
+
+  // Edit target (set when ?topic&deck present); null in create mode.
+  const params = new URLSearchParams(location.search);
+  const editTopic = params.get("topic");
+  const editDeck = params.get("deck");
+  const isEdit = Boolean(editTopic && editDeck);
+
+  async function render() {
+    const textarea = $<HTMLTextAreaElement>("[data-markdown]");
+    const iframe = $<HTMLIFrameElement>("[data-preview]");
+    if (!textarea || !iframe) return;
+    try {
+      // JSON body (no theme) so the preview uses the deck's frontmatter theme;
+      // JSON also sidesteps Astro's form-CSRF check behind the proxy.
+      const res = await fetch("/sandbox/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: textarea.value }),
+      });
+      iframe.srcdoc = await res.text();
+    } catch {
+      iframe.srcdoc =
+        "<p style='font-family:sans-serif;padding:2rem;color:#f87171'>Could not reach the preview service.</p>";
+    }
+  }
+
+  async function save() {
+    const textarea = $<HTMLTextAreaElement>("[data-markdown]");
+    const btn = $<HTMLButtonElement>("[data-save]");
+    if (!textarea) return;
+    if (btn) btn.disabled = true;
+    try {
+      const url = isEdit
+        ? `/api/decks/mine/${encodeURIComponent(editTopic!)}/${encodeURIComponent(editDeck!)}`
+        : "/api/decks/mine";
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ markdown: textarea.value }),
+      });
+      if (res.status === 401) return handle401();
+      if (res.ok) {
+        location.assign("/account");
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.detail ?? `Could not save (${res.status}).`, "err");
+    } catch {
+      setMsg("Network error while saving.", "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function loadSource() {
+    const textarea = $<HTMLTextAreaElement>("[data-markdown]");
+    const titleEl = $<HTMLElement>("[data-title]");
+    if (!textarea) return;
+
+    if (isEdit) {
+      if (titleEl) titleEl.textContent = "Edit deck";
+      const res = await fetch(
+        `/api/decks/mine/${encodeURIComponent(editTopic!)}/${encodeURIComponent(editDeck!)}`,
+        { headers: authHeaders() },
+      );
+      if (res.status === 401) return handle401();
+      if (!res.ok) {
+        setMsg("Could not load that deck.", "err");
+        return;
+      }
+      const data = await res.json();
+      textarea.value = data.markdown ?? "";
+    } else {
+      if (titleEl) titleEl.textContent = "New deck";
+      textarea.value = (window as any).__VD_SAMPLE ?? "";
+    }
+    render();
+  }
+
+  function initEditor() {
+    if (!jwt()) {
+      location.replace("/login");
+      return;
+    }
+    $("[data-save]")?.addEventListener("click", save);
+    let timer: number | undefined;
+    $("[data-markdown]")?.addEventListener("input", () => {
+      // Debounce live preview while typing.
+      window.clearTimeout(timer);
+      timer = window.setTimeout(render, 500);
+    });
+    loadSource();
+  }
+
+  initEditor();
+</script>
+
+<style>
+  .editor {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 2rem) 1.25rem 2.5rem;
+  }
+  .editor__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .editor__title {
+    margin: 0;
+  }
+  .editor__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .editor__link {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+  }
+  .editor__link:hover {
+    color: var(--vd-accent);
+  }
+  .editor__btn {
+    padding: 0.55rem 1.3rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .editor__btn:hover {
+    filter: brightness(1.08);
+  }
+  .editor__btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .editor__msg {
+    margin: 0 0 1rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .editor__msg[data-kind="err"] {
+    color: #f87171;
+  }
+  .editor__msg[data-kind="ok"] {
+    color: var(--vd-accent);
+  }
+  .editor__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  .editor__textarea {
+    width: 100%;
+    min-height: 24rem;
+    padding: 0.9rem 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    resize: vertical;
+    tab-size: 2;
+  }
+  .editor__iframe {
+    width: 100%;
+    height: 100%;
+    min-height: 32rem;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-bg);
+  }
+
+  @media (min-width: 56rem) {
+    .editor__grid {
+      grid-template-columns: 1fr 1fr;
+      height: 70vh;
+    }
+    .editor__textarea {
+      min-height: 0;
+    }
+  }
+</style>

@@ -26,6 +26,16 @@ def slugify(value: str) -> str:
     return value.strip("-")
 
 
+def deck_filename(meta: dict) -> str:
+    """Deterministic canonical filename from deck frontmatter.
+
+    topic + title slugs keep it unique and human-readable; re-saving the same
+    deck (same topic + title) lands on the same file, refreshing it in place.
+    Never derived from a user-supplied upload filename.
+    """
+    return f"{slugify(str(meta['topic']))}__{slugify(str(meta['title']))}.md"
+
+
 def _get_or_create_topic(db: Session, *, topic_field: str, theme: str) -> Topic:
     slug = slugify(topic_field)
     topic = db.scalar(select(Topic).where(Topic.slug == slug))
