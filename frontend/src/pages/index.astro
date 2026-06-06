@@ -10,6 +10,34 @@
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ReticleMark from "../components/ReticleMark.astro";
+import DeckModal from "../components/DeckModal.astro";
+import { fetchDeck } from "../lib/api";
+
+// Featured reference decks shown on the landing — each opens the shared deck
+// modal when clicked. (Title comes from the deck so it stays accurate.)
+const FEATURED: [string, string][] = [
+  ["vibedeck", "what-is-vibedeck"],
+  ["vibedeck", "anatomy-of-a-vibedeck-file"],
+  ["vibedeck", "crafting-a-vibedeck-theme"],
+];
+const featured = (
+  await Promise.all(
+    FEATURED.map(async ([topic, slug]) => {
+      const d = await fetchDeck(topic, slug);
+      return d
+        ? {
+            topic,
+            slug,
+            title: d.title,
+            url: `/${topic}/${slug}`,
+            card_count: d.cards.length,
+            created_at: null,
+            updated_at: null,
+          }
+        : null;
+    }),
+  )
+).filter((d): d is NonNullable<typeof d> => d !== null);
 
 // Recently shipped on this v2 instance (newest first).
 const recentlyAdded = [
@@ -69,6 +97,38 @@ const upcoming = [
       learn something.
     </p>
 
+    <!-- Featured decks — click a thumbnail to open the deck modal -->
+    {
+      featured.length > 0 && (
+        <section class="landing__section">
+          <h2 class="landing__h2">Learn more about VibeDeck (using VibeDeck!)</h2>
+          <ul class="featured">
+            {featured.map((d) => (
+              <li
+                class="featured__item"
+                role="button"
+                tabindex="0"
+                data-deck={JSON.stringify(d)}
+                aria-label={`Open ${d.title}`}
+              >
+                <span class="featured__thumb">
+                  <iframe
+                    src={`${d.url}?embed=1`}
+                    title={d.title}
+                    loading="lazy"
+                    scrolling="no"
+                    tabindex="-1"
+                    aria-hidden="true"
+                  />
+                </span>
+                <h3 class="featured__title">{d.title}</h3>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
     <!-- Recently added -->
     <section class="landing__section">
       <h2 class="landing__h2">Recently added</h2>
@@ -106,6 +166,28 @@ const upcoming = [
       </p>
     </footer>
   </main>
+
+  <DeckModal />
+
+  <script>
+    function whenReady(cb: () => void) {
+      if ((window as any).Vibedeck) cb();
+      else document.addEventListener("vibedeck:ready", cb, { once: true });
+    }
+    document.querySelectorAll<HTMLElement>(".featured__item[data-deck]").forEach((el) => {
+      const open = () => {
+        const deck = JSON.parse(el.getAttribute("data-deck") || "null");
+        if (deck) whenReady(() => (window as any).Vibedeck.openDeck(deck));
+      };
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
+  </script>
 </BaseLayout>
 
 <style>
@@ -204,6 +286,61 @@ const upcoming = [
     background: var(--vd-accent);
     margin-bottom: 1rem;
   }
+  /* ── Featured decks ── */
+  .featured {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr; /* one per row — stacked vertically */
+  }
+  .featured__item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+  }
+  .featured__item:focus-visible {
+    outline: 2px solid var(--vd-accent);
+    outline-offset: 4px;
+    border-radius: var(--vd-radius);
+  }
+  .featured__thumb {
+    flex: none;
+    position: relative;
+    width: clamp(8rem, 38%, 15rem);
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-bg);
+  }
+  .featured__item:hover .featured__thumb {
+    border-color: var(--vd-accent);
+  }
+  .featured__thumb iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    pointer-events: none; /* clicks fall through to the item */
+  }
+  .featured__title {
+    margin: 0;
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    color: var(--vd-heading);
+  }
+  .featured__item:hover .featured__title {
+    color: var(--vd-accent);
+  }
+
   .flist {
     list-style: none;
     margin: 0;
