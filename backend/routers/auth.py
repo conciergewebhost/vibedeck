@@ -6,7 +6,7 @@ The form field `username` carries the user's email.
 import hmac
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,8 +29,32 @@ from services.auth import (
     get_or_create_passwordless_user,
 )
 from services.email import send_magic_link
+from services.ratelimit import SlidingWindowLimiter
 
 router = APIRouter()
+
+_WINDOW_SECONDS = 3600.0
+# Per-IP limiters for the magic-link request endpoint. Module-level so they
+# persist across requests within the (single) worker process.
+_link_limiter = SlidingWindowLimiter()  # all request-link calls
+_bad_code_limiter = SlidingWindowLimiter()  # only invalid-code signup attempts
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP. Only Caddy reaches this app, so the leftmost
+    X-Forwarded-For entry is the real client; fall back to the socket peer."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _too_many(retry_after: int, detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 @router.post("/token", response_model=Token)
@@ -77,13 +101,29 @@ def upload_token(body: UploadTokenRequest, db: Session = Depends(get_db)) -> Tok
 
 
 @router.post("/request-link", response_model=MessageOut)
-def request_link(body: RequestLinkInput, db: Session = Depends(get_db)) -> MessageOut:
+def request_link(
+    body: RequestLinkInput,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> MessageOut:
     """Email a magic sign-in link (passwordless).
 
     Returning users get a login link. Creating a *new* account requires the
     shared NEW_USER_CODE invite gate (testing phase); the user is only
     created later, when they click the link (see /verify).
+
+    Rate limited per client IP to blunt invite-code brute-forcing and
+    email-spam abuse (this endpoint sends an email on success).
     """
+    ip = _client_ip(request)
+
+    # Overall per-IP cap on the endpoint (covers email-spam + hammering).
+    allowed, retry_after = _link_limiter.hit(
+        ip, settings.RATE_LIMIT_REQUESTS_PER_HOUR, _WINDOW_SECONDS
+    )
+    if not allowed:
+        raise _too_many(retry_after, "Too many requests. Please try again later.")
+
     email = body.email.lower()
     user = db.scalar(select(User).where(User.email == email))
 
@@ -94,6 +134,15 @@ def request_link(body: RequestLinkInput, db: Session = Depends(get_db)) -> Messa
         expected = settings.NEW_USER_CODE.encode("utf-8")
         submitted = (body.code or "").encode("utf-8")
         if not hmac.compare_digest(submitted, expected):
+            # Tighter, dedicated cap on invite-code guessing per IP.
+            ok, code_retry = _bad_code_limiter.hit(
+                ip, settings.RATE_LIMIT_BAD_CODE_PER_HOUR, _WINDOW_SECONDS
+            )
+            if not ok:
+                raise _too_many(
+                    code_retry,
+                    "Too many invalid invite-code attempts. Please try again later.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="A valid invite code is required to create an account.",

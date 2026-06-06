@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # Magic links are short-lived signed JWTs (no DB token table).
     MAGIC_LINK_EXPIRE_MINUTES: int = 15
 
+    # Per-IP rate limits on POST /api/auth/request-link (sliding 1-hour
+    # window). The overall cap blunts email-spam and general hammering; the
+    # tighter bad-code cap specifically throttles invite-code guessing.
+    RATE_LIMIT_REQUESTS_PER_HOUR: int = 12
+    RATE_LIMIT_BAD_CODE_PER_HOUR: int = 5
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"

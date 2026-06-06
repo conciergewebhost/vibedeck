@@ -38,6 +38,8 @@ import main  # noqa: E402
 from config import settings  # noqa: E402
 from database import Base, get_db  # noqa: E402
 from models import User  # noqa: E402
+from routers import auth as auth_router  # noqa: E402
+from services.ratelimit import SlidingWindowLimiter  # noqa: E402
 from services.auth import (  # noqa: E402
     create_access_token,
     create_magic_token,
@@ -107,6 +109,10 @@ class _AppTestCase(unittest.TestCase):
         self.Session = TestingSession
         self.client = TestClient(main.app)
 
+        # Rate limiters are module-level; reset so tests don't leak counts.
+        auth_router._link_limiter.clear()
+        auth_router._bad_code_limiter.clear()
+
     def tearDown(self):
         main.app.dependency_overrides.clear()
         Base.metadata.drop_all(self.engine)
@@ -153,6 +159,66 @@ class TestRequestLink(_AppTestCase):
             json={"email": "MixedCase@E.com", "code": settings.NEW_USER_CODE},
         )
         self.assertEqual(sender.call_args.kwargs["to"], "mixedcase@e.com")
+
+
+class TestSlidingWindowLimiter(unittest.TestCase):
+    def test_allows_up_to_limit_then_blocks(self):
+        lim = SlidingWindowLimiter()
+        t = 1000.0
+        for _ in range(3):
+            allowed, retry = lim.hit("ip", limit=3, window_seconds=60, now=t)
+            self.assertTrue(allowed)
+            self.assertEqual(retry, 0)
+        allowed, retry = lim.hit("ip", limit=3, window_seconds=60, now=t)
+        self.assertFalse(allowed)
+        self.assertGreater(retry, 0)
+
+    def test_window_slides(self):
+        lim = SlidingWindowLimiter()
+        for _ in range(3):
+            lim.hit("ip", limit=3, window_seconds=60, now=1000.0)
+        # Blocked at t=1000, but allowed again once the window has passed.
+        self.assertFalse(lim.hit("ip", 3, 60, now=1000.0)[0])
+        self.assertTrue(lim.hit("ip", 3, 60, now=1061.0)[0])
+
+    def test_keys_are_independent(self):
+        lim = SlidingWindowLimiter()
+        self.assertTrue(lim.hit("a", 1, 60, now=1.0)[0])
+        self.assertFalse(lim.hit("a", 1, 60, now=1.0)[0])
+        self.assertTrue(lim.hit("b", 1, 60, now=1.0)[0])  # different key
+
+
+class TestRequestLinkRateLimit(_AppTestCase):
+    @mock.patch("routers.auth.send_magic_link")
+    def test_invalid_code_attempts_are_throttled(self, sender):
+        limit = settings.RATE_LIMIT_BAD_CODE_PER_HOUR
+        for _ in range(limit):
+            r = self.client.post(
+                "/api/auth/request-link",
+                json={"email": "guess@e.com", "code": "wrong"},
+            )
+            self.assertEqual(r.status_code, 403)
+        blocked = self.client.post(
+            "/api/auth/request-link",
+            json={"email": "guess@e.com", "code": "wrong"},
+        )
+        self.assertEqual(blocked.status_code, 429)
+        self.assertIn("Retry-After", blocked.headers)
+        sender.assert_not_called()
+
+    @mock.patch("routers.auth.send_magic_link")
+    def test_overall_per_ip_cap(self, sender):
+        self.add_user("known@e.com")
+        limit = settings.RATE_LIMIT_REQUESTS_PER_HOUR
+        for _ in range(limit):
+            r = self.client.post(
+                "/api/auth/request-link", json={"email": "known@e.com"}
+            )
+            self.assertEqual(r.status_code, 200)
+        blocked = self.client.post(
+            "/api/auth/request-link", json={"email": "known@e.com"}
+        )
+        self.assertEqual(blocked.status_code, 429)
 
 
 class TestVerify(_AppTestCase):
