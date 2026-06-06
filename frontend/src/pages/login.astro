@@ -1,0 +1,164 @@
+---
+/**
+ * /login — passwordless sign-in / sign-up.
+ *
+ * One form requests a magic link via POST /api/auth/request-link. Returning
+ * users leave the invite code blank; creating a new account (testing phase)
+ * requires the shared invite code. Framework-free client script, same style
+ * as admin.astro. The actual session is established later on /auth/verify.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Sign in — Vibedeck">
+  <main class="login">
+    <h1 class="login__title">Sign in to Vibedeck</h1>
+    <p class="login__lead">
+      Enter your email and we'll send you a one-click sign-in link — no password
+      needed. Creating a new account during the testing phase requires an invite
+      code.
+    </p>
+
+    <form class="login__form" data-login-form>
+      <label class="login__label" for="email">Email</label>
+      <input
+        class="login__input"
+        id="email"
+        type="email"
+        data-email
+        required
+        autocomplete="email"
+        placeholder="you@example.com"
+      />
+
+      <label class="login__label" for="code">Invite code <span class="login__hint">(new accounts only)</span></label>
+      <input
+        class="login__input"
+        id="code"
+        type="text"
+        data-code
+        autocomplete="off"
+        placeholder="Leave blank if you already have an account"
+      />
+
+      <button class="login__btn" type="submit" data-submit>Email me a link</button>
+    </form>
+
+    <p class="login__msg" data-msg role="status" hidden></p>
+  </main>
+</BaseLayout>
+
+<script>
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+
+  function setMsg(text: string, kind: "ok" | "err") {
+    const msg = $<HTMLElement>("[data-msg]");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.dataset.kind = kind;
+    msg.hidden = false;
+  }
+
+  function initLogin() {
+    const form = $<HTMLFormElement>("[data-login-form]");
+    const btn = $<HTMLButtonElement>("[data-submit]");
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $<HTMLInputElement>("[data-email]")?.value.trim() ?? "";
+      const code = $<HTMLInputElement>("[data-code]")?.value.trim() ?? "";
+      if (!email) return;
+
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch("/api/auth/request-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, code: code || null }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setMsg(data.message ?? "Check your email for your sign-in link.", "ok");
+          form?.reset();
+        } else if (res.status === 403) {
+          setMsg(
+            data.detail ?? "A valid invite code is required to create an account.",
+            "err",
+          );
+        } else {
+          setMsg(data.detail ?? "Something went wrong. Please try again.", "err");
+        }
+      } catch {
+        setMsg("Network error. Please try again.", "err");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  }
+
+  initLogin();
+</script>
+
+<style>
+  .login {
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 8vw, 4rem) 1.5rem;
+  }
+  .login__title {
+    margin: 0 0 0.75rem;
+  }
+  .login__lead {
+    color: var(--vd-text-muted);
+    line-height: 1.6;
+    margin: 0 0 2rem;
+  }
+  .login__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .login__label {
+    font-size: 0.9rem;
+    color: var(--vd-text-muted);
+    margin-top: 0.75rem;
+  }
+  .login__hint {
+    font-style: italic;
+  }
+  .login__input {
+    padding: 0.65rem 0.8rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .login__btn {
+    margin-top: 1.5rem;
+    padding: 0.7rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .login__btn:hover {
+    filter: brightness(1.08);
+  }
+  .login__btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .login__msg {
+    margin-top: 1.25rem;
+    line-height: 1.5;
+  }
+  .login__msg[data-kind="ok"] {
+    color: var(--vd-accent);
+  }
+  .login__msg[data-kind="err"] {
+    color: #f87171;
+  }
+</style>

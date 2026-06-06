@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
 
+    # Passwordless (magic-link) signup/login. NEW_USER_CODE gates account
+    # creation during the testing phase; existing users skip it. Email is
+    # sent via the Resend HTTP API.
+    NEW_USER_CODE: str
+    RESEND_API_KEY: str
+    EMAIL_FROM_ADDRESS: str
+    EMAIL_FROM_NAME: str = "Vibedeck"
+    # Magic links are short-lived signed JWTs (no DB token table).
+    MAGIC_LINK_EXPIRE_MINUTES: int = 15
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"

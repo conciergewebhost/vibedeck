@@ -1,0 +1,82 @@
+---
+/**
+ * /auth/verify?token=… — the magic-link landing page.
+ *
+ * Exchanges the token from the emailed link for a session JWT via
+ * POST /api/auth/verify, stores it in localStorage (key "vd_session" — the
+ * same key the navbar reads), then redirects to /decks. Done client-side
+ * because the session must live in the browser.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Signing you in — Vibedeck">
+  <main class="verify">
+    <p class="verify__status" data-status>Signing you in…</p>
+    <p class="verify__fallback" data-fallback hidden>
+      <a href="/login">Back to sign in</a>
+    </p>
+  </main>
+</BaseLayout>
+
+<script>
+  const SESSION_KEY = "vd_session";
+
+  function fail(message: string) {
+    const status = document.querySelector<HTMLElement>("[data-status]");
+    const fallback = document.querySelector<HTMLElement>("[data-fallback]");
+    if (status) {
+      status.textContent = message;
+      status.dataset.kind = "err";
+    }
+    if (fallback) fallback.hidden = false;
+  }
+
+  async function verify() {
+    const token = new URLSearchParams(location.search).get("token");
+    if (!token) {
+      fail("This link is invalid or has expired.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (!res.ok) {
+        fail("This link is invalid or has expired.");
+        return;
+      }
+      const data = await res.json();
+      localStorage.setItem(SESSION_KEY, data.access_token);
+      location.replace("/decks");
+    } catch {
+      fail("Network error. Please try again.");
+    }
+  }
+
+  verify();
+</script>
+
+<style>
+  .verify {
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: clamp(3rem, 12vw, 6rem) 1.5rem;
+    text-align: center;
+  }
+  .verify__status {
+    font-size: 1.15rem;
+    color: var(--vd-text);
+  }
+  .verify__status[data-kind="err"] {
+    color: #f87171;
+  }
+  .verify__fallback {
+    margin-top: 1.5rem;
+  }
+  .verify__fallback a {
+    color: var(--vd-accent);
+  }
+</style>

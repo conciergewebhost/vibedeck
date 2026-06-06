@@ -1,0 +1,226 @@
+---
+/**
+ * /sandbox — try the Vibedeck deck format with no account and no persistence.
+ *
+ * The author edits markdown on the left; on render we POST it to
+ * /sandbox/preview (which runs the real parser and server-renders the actual
+ * Reader) and drop the returned HTML into the preview iframe on the right.
+ * Nothing is saved — the markdown only ever lives in the request.
+ */
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+// A small starter deck demonstrating the frontmatter + a few card types.
+// Mirrors the block model the parser expects: deck frontmatter, then each
+// card is a `type` frontmatter block followed by its markdown body.
+const SAMPLE = `---
+title: My First Deck
+author: You
+topic: sandbox
+keywords: [demo, example]
+theme: operazione-stile
+description: A tiny starter deck — edit me!
+---
+---
+type: title
+---
+# My First Deck
+### A sandbox starter
+---
+type: concept
+---
+## One idea per card
+
+Keep each card focused on a single concept. The constraint is the feature.
+---
+type: summary
+---
+## Takeaways
+
+- Write in plain markdown
+- One idea per card
+- Swipe, arrow, or tap through
+---
+type: quote
+---
+> Simplicity is the ultimate sophistication.
+
+— da Vinci
+`;
+---
+
+<BaseLayout title="Sandbox — Vibedeck">
+  <main class="sandbox">
+    <header class="sandbox__head">
+      <h1 class="sandbox__title">Sandbox</h1>
+      <p class="sandbox__lead">
+        Write a deck in markdown and preview it live. Nothing is saved — this is
+        just for trying the format.
+      </p>
+    </header>
+
+    <div class="sandbox__grid">
+      <section class="sandbox__editor">
+        <div class="sandbox__toolbar">
+          <label class="sandbox__theme-label" for="theme">Theme</label>
+          <select class="sandbox__select" id="theme" data-theme>
+            <option value="operazione-stile">Operazione Stile</option>
+            <option value="fascicolo">Fascicolo</option>
+            <option value="default">Default</option>
+          </select>
+          <button class="sandbox__btn" type="button" data-render>Render preview ›</button>
+        </div>
+        <textarea
+          class="sandbox__textarea"
+          data-markdown
+          spellcheck="false"
+          aria-label="Deck markdown">{SAMPLE}</textarea>
+      </section>
+
+      <section class="sandbox__preview">
+        <iframe
+          class="sandbox__iframe"
+          data-preview
+          title="Deck preview"
+          loading="lazy"></iframe>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<script>
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+
+  async function render() {
+    const textarea = $<HTMLTextAreaElement>("[data-markdown]");
+    const select = $<HTMLSelectElement>("[data-theme]");
+    const iframe = $<HTMLIFrameElement>("[data-preview]");
+    if (!textarea || !select || !iframe) return;
+
+    try {
+      // JSON (not a form content-type) so Astro's CSRF origin check doesn't
+      // trip behind the TLS-terminating proxy, where the node server sees
+      // http:// while the browser Origin is https://.
+      const res = await fetch("/sandbox/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: textarea.value, theme: select.value }),
+      });
+      // The server returns a full HTML document; srcdoc isolates the reader's
+      // fixed-position layout and shares our same-origin assets.
+      iframe.srcdoc = await res.text();
+    } catch {
+      iframe.srcdoc =
+        "<p style='font-family:sans-serif;padding:2rem;color:#f87171'>Could not reach the preview service.</p>";
+    }
+  }
+
+  function initSandbox() {
+    $("[data-render]")?.addEventListener("click", render);
+    $("[data-theme]")?.addEventListener("change", render);
+    render(); // show the starter deck immediately
+  }
+
+  initSandbox();
+</script>
+
+<style>
+  .sandbox {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 5vw, 2.5rem) 1.25rem 2.5rem;
+  }
+  .sandbox__head {
+    margin-bottom: 1.5rem;
+  }
+  .sandbox__title {
+    margin: 0 0 0.5rem;
+  }
+  .sandbox__lead {
+    color: var(--vd-text-muted);
+    margin: 0;
+    line-height: 1.6;
+  }
+  .sandbox__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  .sandbox__editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .sandbox__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .sandbox__theme-label {
+    color: var(--vd-text-muted);
+    font-size: 0.9rem;
+  }
+  .sandbox__select {
+    padding: 0.5rem 0.7rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .sandbox__btn {
+    margin-left: auto;
+    padding: 0.55rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .sandbox__btn:hover {
+    filter: brightness(1.08);
+  }
+  .sandbox__textarea {
+    width: 100%;
+    min-height: 24rem;
+    padding: 0.9rem 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    resize: vertical;
+    tab-size: 2;
+  }
+  .sandbox__preview {
+    min-height: 24rem;
+  }
+  .sandbox__iframe {
+    width: 100%;
+    height: 100%;
+    min-height: 32rem;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-bg);
+  }
+
+  /* Side-by-side once there's room. */
+  @media (min-width: 56rem) {
+    .sandbox__grid {
+      grid-template-columns: 1fr 1fr;
+      align-items: stretch;
+      height: 70vh;
+    }
+    .sandbox__textarea {
+      flex: 1;
+      min-height: 0;
+    }
+    .sandbox__preview {
+      height: 70vh;
+    }
+  }
+</style>

@@ -16,6 +16,6 @@ if (!data) {
 }
 ---
 
-<BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme}>
+<BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme} showNav={false}>
   <Reader deck={data} topicSlug={topic!} />
 </BaseLayout>

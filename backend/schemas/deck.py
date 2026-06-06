@@ -13,6 +13,16 @@ class Card(BaseModel):
     body: str  # raw markdown; rendered at the frontend layer
 
 
+class PreviewInput(BaseModel):
+    """Body for the public sandbox preview (POST /api/decks/preview).
+
+    Raw deck markdown that is parsed and returned as a DeckDetail without
+    ever touching the DB or filesystem.
+    """
+
+    markdown: str
+
+
 class DeckListItem(BaseModel):
     """A deck as it appears in a topic listing."""
 

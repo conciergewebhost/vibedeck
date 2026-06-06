@@ -1,0 +1,140 @@
+---
+/**
+ * NavBar — sitewide top navigation for the landing page and all non-deck
+ * pages (the immersive reader opts out via BaseLayout's `showNav={false}`).
+ *
+ * Auth state is resolved client-side: SSR has no session, so the bar renders
+ * the "Log in" link by default and a small inline script swaps in the signed-in
+ * user's email + a log-out control when a session token is present in
+ * localStorage. Framework-free, matching the pattern in admin.astro.
+ */
+---
+
+<header class="nav">
+  <nav class="nav__inner" aria-label="Primary">
+    <a class="nav__brand" href="/">Vibedeck</a>
+    <div class="nav__links">
+      <a class="nav__link" href="/decks">Decks</a>
+      <a class="nav__link" href="/sandbox">Sandbox</a>
+      <!-- Logged-out (default, SSR): a single login/signup entry point. -->
+      <a class="nav__link nav__auth" href="/login" data-nav-login>Log in / Sign up</a>
+      <!-- Logged-in (revealed client-side when a session exists). -->
+      <span class="nav__user" data-nav-user hidden>
+        <span class="nav__email" data-nav-email></span>
+        <button class="nav__logout" type="button" data-nav-logout>Log out</button>
+      </span>
+    </div>
+  </nav>
+</header>
+
+<script>
+  const SESSION_KEY = "vd_session";
+
+  async function initNav() {
+    const loginLink = document.querySelector<HTMLElement>("[data-nav-login]");
+    const userBox = document.querySelector<HTMLElement>("[data-nav-user]");
+    const emailEl = document.querySelector<HTMLElement>("[data-nav-email]");
+    const logout = document.querySelector<HTMLButtonElement>("[data-nav-logout]");
+    if (!loginLink || !userBox || !emailEl || !logout) return;
+
+    logout.addEventListener("click", () => {
+      localStorage.removeItem(SESSION_KEY);
+      location.reload();
+    });
+
+    const jwt = localStorage.getItem(SESSION_KEY);
+    if (!jwt) return; // stay logged-out
+
+    // Validate the session and fetch the email. A stale/expired token clears
+    // itself so the bar falls back to the logged-out state.
+    try {
+      const res = await fetch("/api/users/me", {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      if (!res.ok) {
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      const user = await res.json();
+      emailEl.textContent = user.email ?? "Account";
+      loginLink.hidden = true;
+      userBox.hidden = false;
+    } catch {
+      /* network hiccup — leave the logged-out bar in place */
+    }
+  }
+
+  initNav();
+</script>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--vd-card-bg);
+    border-bottom: 1px solid var(--vd-card-border);
+    backdrop-filter: blur(8px);
+  }
+  .nav__inner {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    max-width: var(--vd-card-max-width);
+    margin: 0 auto;
+    /* Right padding clears the fixed mode-toggle (top-right, z-50). */
+    padding: 0.6rem clamp(3.5rem, 8vw, 4.5rem) 0.6rem 1.25rem;
+  }
+  .nav__brand {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 1.15rem;
+    color: var(--vd-heading);
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .nav__links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .nav__link {
+    color: var(--vd-text);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  .nav__link:hover {
+    color: var(--vd-accent);
+  }
+  .nav__auth {
+    color: var(--vd-accent);
+    font-weight: 600;
+  }
+  .nav__user {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .nav__user[hidden] {
+    display: none;
+  }
+  .nav__email {
+    color: var(--vd-text-muted);
+    font-size: 0.9rem;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nav__logout {
+    background: none;
+    border: 0;
+    color: var(--vd-accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.95rem;
+    text-decoration: underline;
+  }
+</style>

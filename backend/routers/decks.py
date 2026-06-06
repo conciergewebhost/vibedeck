@@ -21,13 +21,16 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import User
-from schemas.deck import AdminDeckItem, DeckDetail, UploadResult
+from schemas.deck import AdminDeckItem, Card, DeckDetail, PreviewInput, UploadResult
 from services import decks as decks_service
 from services.auth import get_current_user
 from services.indexing import index_deck_file, slugify
 from services.parser import DeckParseError, parse_deck
 
 router = APIRouter()
+
+# Reject oversized sandbox input outright — decks are small documents.
+_PREVIEW_MAX_BYTES = 100_000
 
 
 @router.post("/upload", response_model=UploadResult, status_code=status.HTTP_201_CREATED)
@@ -73,6 +76,41 @@ async def upload_deck(
         title=deck.title,
         card_count=deck.card_count,
         url=f"/{deck.topic.slug}/{deck.slug}",
+    )
+
+
+@router.post("/preview", response_model=DeckDetail)
+def preview_deck(body: PreviewInput) -> DeckDetail:
+    """Parse raw deck markdown and return it as a DeckDetail — no persistence.
+
+    Powers the public /sandbox: same parser as a real upload, so authors see
+    exactly what they'd get (including the parser's error messages), but
+    nothing is written to the DB or disk and no auth is required.
+    """
+    if len(body.markdown.encode("utf-8")) > _PREVIEW_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Deck is too large to preview.",
+        )
+
+    try:
+        parsed = parse_deck(body.markdown)
+    except DeckParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Malformed deck: {exc}",
+        )
+
+    meta = parsed.meta
+    return DeckDetail(
+        slug="sandbox",
+        title=str(meta["title"]),
+        author=str(meta["author"]),
+        description=meta.get("description"),
+        topic="sandbox",
+        theme=str(meta["theme"]),
+        keywords=[str(k) for k in meta["keywords"]],
+        cards=[Card(type=c.type, meta=c.meta, body=c.body) for c in parsed.cards],
     )
 
 

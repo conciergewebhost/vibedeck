@@ -8,6 +8,7 @@
  * operazione theme ships both palettes). Content projects through <slot/>.
  */
 import "../styles/global.css";
+import NavBar from "../components/NavBar.astro";
 
 // Theme stylesheets live in src/styles/themes/ (CLAUDE.md convention) and
 // are selected at runtime by the deck/topic `theme` field. We resolve each
@@ -23,10 +24,13 @@ const themeUrls = import.meta.glob("../styles/themes/*.css", {
 interface Props {
   title: string;
   theme?: string;
+  // Show the sitewide navbar. On by default for every page; the immersive
+  // reader opts out so it stays full-viewport.
+  showNav?: boolean;
 }
 
 // Site-wide default theme. Pages/decks may override via the `theme` prop.
-const { title, theme = "operazione-stile" } = Astro.props;
+const { title, theme = "operazione-stile", showNav = true } = Astro.props;
 
 // Resolve the requested theme; fall back to default for an unknown name.
 const themeHref =
@@ -74,6 +78,8 @@ const themeHref =
     >
       <span data-mode-icon aria-hidden="true">☾</span>
     </button>
+
+    {showNav && <NavBar />}
 
     <slot />
 

@@ -25,3 +25,8 @@ pyjwt==2.10.*
 # bcrypt directly rather than via passlib: passlib 1.7.x is unmaintained
 # and fails outright with bcrypt 5.x. bcrypt's own API is simple enough.
 bcrypt==5.0.*
+# Email-address validation, enables Pydantic's EmailStr type.
+email-validator==2.*
+
+# Outbound HTTP — used to call the Resend email API for magic links.
+httpx==0.28.*

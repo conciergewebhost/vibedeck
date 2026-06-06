@@ -5,6 +5,7 @@ The form field `username` carries the user's email.
 
 import hmac
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
@@ -13,8 +14,21 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import User
-from schemas.auth import Token, UploadTokenRequest
-from services.auth import authenticate_user, create_access_token
+from schemas.auth import (
+    MessageOut,
+    RequestLinkInput,
+    Token,
+    UploadTokenRequest,
+    VerifyInput,
+)
+from services.auth import (
+    authenticate_user,
+    create_access_token,
+    create_magic_token,
+    decode_magic_token,
+    get_or_create_passwordless_user,
+)
+from services.email import send_magic_link
 
 router = APIRouter()
 
@@ -60,3 +74,70 @@ def upload_token(body: UploadTokenRequest, db: Session = Depends(get_db)) -> Tok
             detail="Owner account not provisioned",
         )
     return Token(access_token=create_access_token(subject=owner.email))
+
+
+@router.post("/request-link", response_model=MessageOut)
+def request_link(body: RequestLinkInput, db: Session = Depends(get_db)) -> MessageOut:
+    """Email a magic sign-in link (passwordless).
+
+    Returning users get a login link. Creating a *new* account requires the
+    shared NEW_USER_CODE invite gate (testing phase); the user is only
+    created later, when they click the link (see /verify).
+    """
+    email = body.email.lower()
+    user = db.scalar(select(User).where(User.email == email))
+
+    if user is not None and user.is_active:
+        is_signup = False
+    else:
+        # Unknown (or inactive) email → treat as signup, gated by the code.
+        expected = settings.NEW_USER_CODE.encode("utf-8")
+        submitted = (body.code or "").encode("utf-8")
+        if not hmac.compare_digest(submitted, expected):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="A valid invite code is required to create an account.",
+            )
+        is_signup = True
+
+    token = create_magic_token(email, is_signup=is_signup)
+    link = f"{settings.BASE_URL}/auth/verify?token={token}"
+    try:
+        send_magic_link(to=email, link=link, is_signup=is_signup)
+    except Exception:
+        # Don't leak whether delivery failed for a specific address; the
+        # email provider logs the detail. Surface a generic 502.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not send the sign-in email. Please try again shortly.",
+        )
+
+    return MessageOut(message="Check your email for your sign-in link.")
+
+
+@router.post("/verify", response_model=Token)
+def verify(body: VerifyInput, db: Session = Depends(get_db)) -> Token:
+    """Exchange a magic-link token for a session JWT.
+
+    Signup links create the account on first use; login links require an
+    existing, active account.
+    """
+    try:
+        email, is_signup = decode_magic_token(body.token)
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This link is invalid or has expired.",
+        )
+
+    if is_signup:
+        user = get_or_create_passwordless_user(db, email)
+    else:
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This link is invalid or has expired.",
+            )
+
+    return Token(access_token=create_access_token(subject=user.email))

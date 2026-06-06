@@ -71,3 +71,23 @@ export const fetchDeck = (topic: string, deck: string) =>
   getJson<DeckDetail>(
     `/api/decks/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}`,
   );
+
+/**
+ * Parse raw deck markdown via the public sandbox endpoint (no persistence).
+ * Returns the parsed deck on success, or the parser's error message on a 400
+ * so the sandbox can show authors exactly what's wrong.
+ */
+export async function previewDeck(
+  markdown: string,
+): Promise<{ ok: true; deck: DeckDetail } | { ok: false; error: string }> {
+  const res = await fetch(`${API_BASE}/api/decks/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown }),
+  });
+  if (res.ok) {
+    return { ok: true, deck: (await res.json()) as DeckDetail };
+  }
+  const data = (await res.json().catch(() => ({}))) as { detail?: string };
+  return { ok: false, error: data.detail ?? `Preview failed (${res.status}).` };
+}

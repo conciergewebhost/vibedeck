@@ -15,9 +15,20 @@ import type { DeckDetail } from "../lib/api";
 interface Props {
   deck: DeckDetail;
   topicSlug: string;
+  // The index modal's back link. Defaults to the deck's topic; the sandbox
+  // overrides it (and uses target="_top" to break out of its preview iframe).
+  backHref?: string;
+  backLabel?: string;
+  backTarget?: string;
 }
 
-const { deck, topicSlug } = Astro.props;
+const {
+  deck,
+  topicSlug,
+  backHref = `/${topicSlug}`,
+  backLabel = "‹ Back to deck list",
+  backTarget,
+} = Astro.props;
 const total = deck.cards.length;
 ---
 
@@ -48,7 +59,7 @@ const total = deck.cards.length;
   <div class="reader__modal" data-modal hidden>
     <div class="reader__modal-panel" role="dialog" aria-label="Card index">
       <header class="reader__modal-head">
-        <a class="reader__back" href={`/${topicSlug}`}>‹ Back to deck list</a>
+        <a class="reader__back" href={backHref} target={backTarget}>{backLabel}</a>
         <button class="reader__btn" data-nav="close" aria-label="Close index">✕</button>
       </header>
       <ol class="reader__index">

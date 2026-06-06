@@ -1,0 +1,73 @@
+---
+/**
+ * /sandbox/preview — server-rendered preview of sandbox markdown.
+ *
+ * The editor (/sandbox) POSTs { markdown, theme } here and drops the returned
+ * HTML into a preview iframe. We parse via the public preview endpoint (the
+ * real parser, nothing persisted) and render the actual Reader so authors see
+ * a pixel-faithful deck. The reader's fixed-position layout is contained by
+ * the iframe. On a parse error we render the parser's message instead.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Reader from "../../components/Reader.astro";
+import { previewDeck, type DeckDetail } from "../../lib/api";
+
+const ALLOWED_THEMES = new Set(["operazione-stile", "fascicolo", "default"]);
+
+let deck: DeckDetail | null = null;
+let error: string | null = null;
+let theme = "operazione-stile";
+
+if (Astro.request.method === "POST") {
+  // Sent as JSON by the sandbox editor (see /sandbox) to avoid Astro's
+  // form-content-type CSRF check behind the proxy.
+  const payload = await Astro.request.json().catch(() => ({}));
+  const markdown = typeof payload.markdown === "string" ? payload.markdown : "";
+  const requested = typeof payload.theme === "string" ? payload.theme : "";
+  if (ALLOWED_THEMES.has(requested)) theme = requested;
+
+  const result = await previewDeck(markdown);
+  if (result.ok) {
+    // Stamp the chosen theme onto the deck so the reader matches the editor.
+    deck = { ...result.deck, theme };
+  } else {
+    error = result.error;
+  }
+} else {
+  error = "Open the sandbox editor to preview a deck.";
+}
+---
+
+{
+  deck ? (
+    <BaseLayout title="Sandbox preview" theme={theme} showNav={false}>
+      <Reader
+        deck={deck}
+        topicSlug="sandbox"
+        backHref="/sandbox"
+        backLabel="‹ Back to editor"
+        backTarget="_top"
+      />
+    </BaseLayout>
+  ) : (
+    <BaseLayout title="Sandbox preview" showNav={false}>
+      <main class="preview-error">
+        <p class="preview-error__msg">{error}</p>
+      </main>
+    </BaseLayout>
+  )
+}
+
+<style>
+  .preview-error {
+    max-width: 32rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 10vw, 4rem) 1.5rem;
+  }
+  .preview-error__msg {
+    color: #f87171;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
