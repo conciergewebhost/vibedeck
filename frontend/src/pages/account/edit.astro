@@ -275,8 +275,11 @@ One focused idea per card.
       grid-template-columns: 1fr 1fr;
       height: 70vh;
     }
+    /* Fill the 70vh row like the preview iframe does (it has height:100%);
+       without this the textarea collapses to its content height. */
     .editor__textarea {
       min-height: 0;
+      height: 100%;
     }
   }
 </style>
