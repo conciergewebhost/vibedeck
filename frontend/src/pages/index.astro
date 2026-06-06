@@ -11,12 +11,25 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ReticleMark from "../components/ReticleMark.astro";
 
-// Recently shipped on this v2 instance.
+// Recently shipped on this v2 instance (newest first).
 const recentlyAdded = [
-  "Passwordless sign-in by magic link, with invite-gated signup",
-  "Your account: create, edit, and delete your own decks",
-  "Sandbox — try the deck format with a live preview, nothing saved",
-  "Sitewide navigation and a new logo",
+  {
+    label: "Browse the library as deck cards with an expandable, full-screen viewer",
+    date: "Jun 6, 2026",
+  },
+  {
+    label: "Your account: create, edit, and delete your own decks",
+    date: "Jun 6, 2026",
+  },
+  {
+    label: "Sandbox — try the deck format with a live preview, nothing saved",
+    date: "Jun 6, 2026",
+  },
+  {
+    label: "Passwordless sign-in by magic link, with invite-gated signup",
+    date: "Jun 6, 2026",
+  },
+  { label: "Sitewide navigation and a new logo", date: "Jun 6, 2026" },
 ];
 
 // Next up, from the v2 roadmap.
@@ -60,7 +73,14 @@ const upcoming = [
     <section class="landing__section">
       <h2 class="landing__h2">Recently added</h2>
       <ul class="flist">
-        {recentlyAdded.map((item) => <li class="flist__item">{item}</li>)}
+        {
+          recentlyAdded.map((item) => (
+            <li class="flist__item">
+              <span class="flist__label">{item.label}</span>
+              <span class="flist__date">{item.date}</span>
+            </li>
+          ))
+        }
       </ul>
     </section>
 
@@ -197,6 +217,10 @@ const upcoming = [
     font-size: 1.0625rem;
     line-height: 1.55;
     color: var(--vd-text);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: baseline;
   }
   .flist__item::before {
     content: "›";
@@ -204,6 +228,13 @@ const upcoming = [
     left: 0;
     color: var(--vd-accent);
     font-family: var(--vd-font-heading);
+  }
+  .flist__date {
+    flex: none;
+    color: var(--vd-text-muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   /* ── Footer ── */
