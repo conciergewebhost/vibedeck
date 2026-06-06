@@ -17,12 +17,6 @@ frontend/dist/
 frontend/.astro/
 npm-debug.log*
 
-# ── Per-deployment landing page ───────────────────────────────
-# The site root ("/") is a per-deployment concern, not part of the
-# platform. Drop in a src/pages/index.astro for your own landing page;
-# without one, astro.config redirects "/" to the deck library at /decks.
-frontend/src/pages/index.astro
-
 # ── Uploaded deck files ───────────────────────────────────────
 # Decks are user content, not code: ignore everything under decks/
 # except the sample fixture that ships with the repo.
