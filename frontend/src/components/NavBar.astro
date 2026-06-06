@@ -8,11 +8,15 @@
  * user's email + a log-out control when a session token is present in
  * localStorage. Framework-free, matching the pattern in admin.astro.
  */
+import ReticleMark from "./ReticleMark.astro";
 ---
 
 <header class="nav">
   <nav class="nav__inner" aria-label="Primary">
-    <a class="nav__brand" href="/">Vibedeck</a>
+    <a class="nav__brand" href="/" aria-label="VibeDeck home">
+      <ReticleMark class="nav__mark" size="1.55rem" />
+      <span class="nav__wordmark">VibeDeck</span>
+    </a>
     <div class="nav__links">
       <a class="nav__link" href="/decks">Decks</a>
       <a class="nav__link" href="/sandbox">Sandbox</a>
@@ -87,13 +91,22 @@
     padding: 0.6rem clamp(3.5rem, 8vw, 4.5rem) 0.6rem 1.25rem;
   }
   .nav__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--vd-heading);
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .nav__wordmark {
     font-family: var(--vd-font-heading);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-size: 1.15rem;
-    color: var(--vd-heading);
-    text-decoration: none;
-    margin-right: auto;
+    line-height: 1;
+  }
+  .nav__brand:hover .nav__wordmark {
+    color: var(--vd-accent);
   }
   .nav__links {
     display: flex;

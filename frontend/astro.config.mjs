@@ -6,7 +6,8 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // API base the SSR pages fetch (server-side) and the dev proxy forwards to.
-const { API_BASE_URL } = loadEnv(
+// PUBLIC_SITE_URL (per-deployment) lets us emit absolute canonical/OG URLs.
+const { API_BASE_URL, PUBLIC_SITE_URL } = loadEnv(
   process.env.NODE_ENV ?? "development",
   process.cwd(),
   "",
@@ -28,6 +29,7 @@ export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),
   server: { port: 4321 },
+  ...(PUBLIC_SITE_URL ? { site: PUBLIC_SITE_URL } : {}),
   ...(hasLocalLanding ? {} : { redirects: { "/": "/decks" } }),
   vite: {
     server: {

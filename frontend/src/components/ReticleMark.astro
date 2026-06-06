@@ -1,0 +1,60 @@
+---
+/**
+ * ReticleMark — the VibeDeck logo mark (brand direction "The Reticle":
+ * a spy crosshair fused with a sunburst, sienna dot locked in the centre).
+ *
+ * Inlined SVG so it inherits the current theme: the strokes use --vd-heading
+ * and the centre dot uses --vd-accent (via the --fg/--accent custom props the
+ * source SVG reads), so the mark adapts to every theme + dark/light instead
+ * of being pinned to the brand's espresso/sienna. The standalone file at
+ * /reticle-mark.svg keeps the literal brand colours for use as a favicon.
+ */
+interface Props {
+  size?: string; // any CSS length; defaults to 1em so it tracks font-size
+  title?: string;
+  class?: string;
+}
+const { size = "1em", title = "VibeDeck", class: className } = Astro.props;
+---
+
+<svg
+  class:list={["reticle", className]}
+  width={size}
+  height={size}
+  viewBox="0 0 100 100"
+  role="img"
+  aria-label={title}
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <g fill="var(--fg)">
+    <path d="M97.00,50.00 L91.00,51.60 L91.00,48.40 Z"></path>
+    <path d="M90.70,73.50 L84.71,71.89 L86.31,69.11 Z"></path>
+    <path d="M73.50,90.70 L69.11,86.31 L71.89,84.71 Z"></path>
+    <path d="M50.00,97.00 L48.40,91.00 L51.60,91.00 Z"></path>
+    <path d="M26.50,90.70 L28.11,84.71 L30.89,86.31 Z"></path>
+    <path d="M9.30,73.50 L13.69,69.11 L15.29,71.89 Z"></path>
+    <path d="M3.00,50.00 L9.00,48.40 L9.00,51.60 Z"></path>
+    <path d="M9.30,26.50 L15.29,28.11 L13.69,30.89 Z"></path>
+    <path d="M26.50,9.30 L30.89,13.69 L28.11,15.29 Z"></path>
+    <path d="M50.00,3.00 L51.60,9.00 L48.40,9.00 Z"></path>
+    <path d="M73.50,9.30 L71.89,15.29 L69.11,13.69 Z"></path>
+    <path d="M90.70,26.50 L86.31,30.89 L84.71,28.11 Z"></path>
+  </g>
+  <circle cx="50" cy="50" r="33" fill="none" stroke="var(--fg)" stroke-width="4.5"></circle>
+  <line x1="50" y1="9" x2="50" y2="30" stroke="var(--fg)" stroke-width="4.5"></line>
+  <line x1="50" y1="70" x2="50" y2="91" stroke="var(--fg)" stroke-width="4.5"></line>
+  <line x1="9" y1="50" x2="30" y2="50" stroke="var(--fg)" stroke-width="4.5"></line>
+  <line x1="70" y1="50" x2="91" y2="50" stroke="var(--fg)" stroke-width="4.5"></line>
+  <circle cx="50" cy="50" r="9.5" fill="var(--accent)"></circle>
+</svg>
+
+<style>
+  /* Map the brand's --fg/--accent onto the active theme's tokens so the mark
+     re-colours with the theme and dark/light, never hardcoded. */
+  .reticle {
+    --fg: var(--vd-heading, #2e231b);
+    --accent: var(--vd-accent, #ba5522);
+    display: block;
+    flex: none;
+  }
+</style>

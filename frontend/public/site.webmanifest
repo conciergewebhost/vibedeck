@@ -1,0 +1,13 @@
+{
+  "name": "VibeDeck",
+  "short_name": "VibeDeck",
+  "description": "Knowledge, one card at a time.",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "theme_color": "#2E231B",
+  "background_color": "#E7E0CC",
+  "display": "standalone",
+  "start_url": "/"
+}
