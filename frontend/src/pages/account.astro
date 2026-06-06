@@ -4,8 +4,10 @@
  *
  * Session-gated client-side (redirects to /login without a session). Lists the
  * user's own decks as thumbnail cards via the shared DeckModal component; each
- * opens the expandable viewer (with owner Edit/Delete). Also: upload deck
- * markdown and (private) theme CSS files, manage themes, and log out.
+ * opens the expandable viewer (with owner Edit/Delete). New decks are authored
+ * in the in-browser editor (/account/edit). File upload of decks and theme CSS
+ * is paused pending content moderation; the "My themes" section only appears to
+ * manage themes a user already has.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
@@ -20,19 +22,10 @@ import DeckModal from "../components/DeckModal.astro";
       </div>
       <div class="portal__actions">
         <a class="portal__btn" href="/account/edit">+ New deck</a>
-        <label class="portal__btn portal__btn--ghost">
-          Upload deck
-          <input type="file" accept=".md,text/markdown,.markdown" data-upload-deck hidden />
-        </label>
-        <label class="portal__btn portal__btn--ghost">
-          Upload theme
-          <input type="file" accept=".css,text/css" data-upload-theme hidden />
-        </label>
         <button class="portal__link" type="button" data-logout>Log out</button>
       </div>
     </header>
 
-    <p class="portal__msg" data-msg role="status" hidden></p>
     <ul class="deckgrid" data-deck-list></ul>
 
     <section class="portal__themes">
@@ -73,21 +66,6 @@ import DeckModal from "../components/DeckModal.astro";
     if ((window as any).Vibedeck) cb();
     else document.addEventListener("vibedeck:ready", cb, { once: true });
   }
-  function setMsg(text: string, kind: "ok" | "err") {
-    const msg = $<HTMLElement>("[data-msg]");
-    if (!msg) return;
-    msg.textContent = text;
-    msg.dataset.kind = kind;
-    msg.hidden = false;
-  }
-  const readText = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = () => reject(r.error);
-      r.readAsText(file);
-    });
-
   async function loadMe() {
     const res = await fetch("/api/users/me", { headers: authHeaders() });
     if (res.status === 401) return handle401();
@@ -114,51 +92,6 @@ import DeckModal from "../components/DeckModal.astro";
     for (const d of decks) list.append(V.buildCard(d));
   }
 
-  async function uploadDeck(file: File) {
-    let markdown: string;
-    try {
-      markdown = await readText(file);
-    } catch {
-      return setMsg("Could not read that file.", "err");
-    }
-    const res = await fetch("/api/decks/mine", {
-      method: "POST",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ markdown }),
-    });
-    if (res.status === 401) return handle401();
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setMsg(`Uploaded “${data.title}”.`, "ok");
-      loadDecks();
-    } else {
-      setMsg(data.detail ?? `Upload failed (${res.status}).`, "err");
-    }
-  }
-
-  async function uploadTheme(file: File) {
-    let css: string;
-    try {
-      css = await readText(file);
-    } catch {
-      return setMsg("Could not read that file.", "err");
-    }
-    const name = file.name.replace(/\.css$/i, "");
-    const res = await fetch("/api/themes", {
-      method: "POST",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ name, css }),
-    });
-    if (res.status === 401) return handle401();
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setMsg(`Theme “${data.name}” uploaded.`, "ok");
-      loadThemes();
-    } else {
-      setMsg(data.detail ?? `Theme upload failed (${res.status}).`, "err");
-    }
-  }
-
   async function loadThemes() {
     const res = await fetch("/api/themes/mine", { headers: authHeaders() });
     if (res.status === 401) return handle401();
@@ -167,16 +100,17 @@ import DeckModal from "../components/DeckModal.astro";
   }
 
   function renderThemes(themes: { name: string; slug: string }[]) {
+    const section = $<HTMLElement>(".portal__themes");
     const list = $<HTMLUListElement>("[data-theme-list]");
     if (!list) return;
     list.replaceChildren();
+    // Theme upload is paused (pending content moderation), so themes can no
+    // longer be added here. Show this section only to manage existing ones.
     if (themes.length === 0) {
-      const li = document.createElement("li");
-      li.className = "portal__empty";
-      li.textContent = "No themes yet. Upload a .css theme to use in your decks.";
-      list.append(li);
+      if (section) section.hidden = true;
       return;
     }
+    if (section) section.hidden = false;
     for (const t of themes) {
       const li = document.createElement("li");
       li.className = "portal__theme";
@@ -209,17 +143,6 @@ import DeckModal from "../components/DeckModal.astro";
   function initPortal() {
     requireSession();
     $("[data-logout]")?.addEventListener("click", logout);
-
-    const onPick = (sel: string, fn: (f: File) => void) => {
-      const input = $<HTMLInputElement>(sel);
-      input?.addEventListener("change", () => {
-        const file = input.files?.[0];
-        if (file) fn(file);
-        input.value = ""; // allow re-picking the same file
-      });
-    };
-    onPick("[data-upload-deck]", uploadDeck);
-    onPick("[data-upload-theme]", uploadTheme);
 
     document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
@@ -272,17 +195,6 @@ import DeckModal from "../components/DeckModal.astro";
   .portal__btn:hover {
     filter: brightness(1.08);
   }
-  .portal__btn--ghost {
-    background: transparent;
-    color: var(--vd-text);
-    border-color: var(--vd-card-border);
-    font-weight: 500;
-  }
-  .portal__btn--ghost:hover {
-    border-color: var(--vd-accent);
-    color: var(--vd-accent);
-    filter: none;
-  }
   .portal__link {
     background: none;
     border: 0;
@@ -290,16 +202,6 @@ import DeckModal from "../components/DeckModal.astro";
     cursor: pointer;
     font: inherit;
     text-decoration: underline;
-  }
-  .portal__msg {
-    margin: 0 0 1rem;
-    line-height: 1.5;
-  }
-  .portal__msg[data-kind="ok"] {
-    color: var(--vd-accent);
-  }
-  .portal__msg[data-kind="err"] {
-    color: #f87171;
   }
   .portal__empty {
     color: var(--vd-text-muted);
