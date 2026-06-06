@@ -29,7 +29,7 @@ from services.auth import (
     get_or_create_passwordless_user,
 )
 from services.email import send_magic_link
-from services.ratelimit import SlidingWindowLimiter
+from services.ratelimit import SlidingWindowLimiter, client_ip
 
 router = APIRouter()
 
@@ -38,15 +38,6 @@ _WINDOW_SECONDS = 3600.0
 # persist across requests within the (single) worker process.
 _link_limiter = SlidingWindowLimiter()  # all request-link calls
 _bad_code_limiter = SlidingWindowLimiter()  # only invalid-code signup attempts
-
-
-def _client_ip(request: Request) -> str:
-    """Best-effort client IP. Only Caddy reaches this app, so the leftmost
-    X-Forwarded-For entry is the real client; fall back to the socket peer."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _too_many(retry_after: int, detail: str) -> HTTPException:
@@ -115,7 +106,7 @@ def request_link(
     Rate limited per client IP to blunt invite-code brute-forcing and
     email-spam abuse (this endpoint sends an email on success).
     """
-    ip = _client_ip(request)
+    ip = client_ip(request)
 
     # Overall per-IP cap on the endpoint (covers email-spam + hammering).
     allowed, retry_after = _link_limiter.hit(

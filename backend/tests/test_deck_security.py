@@ -114,5 +114,36 @@ class TestUploadSecurity(unittest.TestCase):
         self.assertEqual(r.status_code, 413)
 
 
+class TestPreviewThrottle(unittest.TestCase):
+    """The public /api/decks/preview is throttled for external callers (XFF
+    present) but exempt for trusted loopback SSR calls (no XFF)."""
+
+    def setUp(self):
+        from routers import decks as decks_router
+
+        decks_router._preview_limiter.clear()
+        self.client = TestClient(main.app)
+
+    def test_external_caller_throttled_after_limit(self):
+        from routers import decks as decks_router
+
+        hdr = {"X-Forwarded-For": "9.9.9.9"}
+        limit = decks_router._PREVIEW_MAX_PER_MIN
+        for _ in range(limit):
+            r = self.client.post("/api/decks/preview", json={"markdown": DECK}, headers=hdr)
+            self.assertEqual(r.status_code, 200)
+        blocked = self.client.post("/api/decks/preview", json={"markdown": DECK}, headers=hdr)
+        self.assertEqual(blocked.status_code, 429)
+        self.assertIn("Retry-After", blocked.headers)
+
+    def test_loopback_not_throttled(self):
+        from routers import decks as decks_router
+
+        # No XFF → trusted loopback (the SSR editor preview path) → never throttled.
+        for _ in range(decks_router._PREVIEW_MAX_PER_MIN + 5):
+            r = self.client.post("/api/decks/preview", json={"markdown": DECK})
+            self.assertEqual(r.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

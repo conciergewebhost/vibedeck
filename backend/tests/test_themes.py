@@ -65,6 +65,10 @@ class TestValidateThemeCss(unittest.TestCase):
         with self.assertRaises(ThemeInvalid):
             validate_theme_css("   ")
 
+    def test_allows_child_combinator(self):
+        # `>` is a valid CSS combinator and must not be rejected as HTML.
+        validate_theme_css(GOOD_CSS + " .reader > .card { color: red; }")
+
 
 class TestSafeMarkup(unittest.TestCase):
     def test_rejects_script(self):

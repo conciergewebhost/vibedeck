@@ -22,8 +22,9 @@ _MAX_CSS_BYTES = 64_000
 # Constructs that can execute code, fetch external resources, or break out of
 # the <style> context. Matched case-insensitively against the raw CSS.
 _FORBIDDEN = [
+    # Block `<` (no valid CSS uses it) to keep HTML/`</style>` out, but allow
+    # `>` — it's the CSS child combinator (`.a > .b`) and can't form a tag.
     (r"<", "HTML tags are not allowed in a theme"),
-    (r">", "HTML tags are not allowed in a theme"),
     (r"@import", "@import is not allowed"),
     (r"javascript:", "javascript: URLs are not allowed"),
     (r"expression\s*\(", "expression() is not allowed"),

@@ -23,7 +23,9 @@ const SANITIZE_CONFIG = {
     "a", "img",
     "table", "thead", "tbody", "tr", "th", "td",
   ],
-  ALLOWED_ATTR: ["href", "title", "alt", "src", "download", "target", "rel"],
+  // No `target`: links open in the same tab, which avoids reverse-tabnabbing
+  // and stops a link from framing-out of the reader's preview iframe.
+  ALLOWED_ATTR: ["href", "title", "alt", "src", "download"],
   // Only allow safe URL schemes (no javascript:, etc.).
   ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#|data:image\/)/i,
 };

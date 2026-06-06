@@ -20,6 +20,21 @@ _MAX_AGE_SECONDS = 3600.0
 _SWEEP_EVERY_SECONDS = 600.0
 
 
+def client_ip(request) -> str:
+    """Best-effort real client IP for rate-limiting.
+
+    The backend binds to localhost and is only reachable through Caddy, which
+    appends the connecting client's IP as the LAST X-Forwarded-For entry. We
+    use the rightmost entry because earlier entries are client-supplied and
+    therefore spoofable. With no XFF (a direct loopback caller, e.g. the SSR
+    server) we fall back to the socket peer.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
 class SlidingWindowLimiter:
     """Counts attempts per key within a trailing time window."""
 

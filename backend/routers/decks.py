@@ -10,6 +10,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     status,
@@ -32,11 +33,19 @@ from services import decks as decks_service
 from services.auth import get_current_user
 from services.decks import DeckConflict, DeckNotOwned, DeckTooLarge, DeckUnsafe
 from services.parser import DeckParseError, parse_deck
+from services.ratelimit import SlidingWindowLimiter, client_ip
 
 router = APIRouter()
 
 # Reject oversized sandbox input outright — decks are small documents.
 _PREVIEW_MAX_BYTES = 100_000
+
+# The public, unauthenticated /preview endpoint is rate-limited per client IP
+# to bound abuse. The editor's live preview reaches it via the SSR server
+# (a loopback call with no X-Forwarded-For), which is exempt — only direct
+# external traffic (proxied by Caddy, so XFF is present) is throttled.
+_preview_limiter = SlidingWindowLimiter()
+_PREVIEW_MAX_PER_MIN = 60
 
 
 @router.post("/upload", response_model=UploadResult, status_code=status.HTTP_201_CREATED)
@@ -94,13 +103,26 @@ async def upload_deck(
 
 
 @router.post("/preview", response_model=DeckDetail)
-def preview_deck(body: PreviewInput) -> DeckDetail:
+def preview_deck(body: PreviewInput, request: Request) -> DeckDetail:
     """Parse raw deck markdown and return it as a DeckDetail — no persistence.
 
     Powers the public /sandbox: same parser as a real upload, so authors see
     exactly what they'd get (including the parser's error messages), but
     nothing is written to the DB or disk and no auth is required.
     """
+    # Throttle direct external callers (they arrive via Caddy with an XFF
+    # header); the SSR editor preview is a loopback call with no XFF, exempt.
+    if request.headers.get("x-forwarded-for"):
+        allowed, retry_after = _preview_limiter.hit(
+            client_ip(request), _PREVIEW_MAX_PER_MIN, 60.0
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many preview requests. Please slow down.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     if len(body.markdown.encode("utf-8")) > _PREVIEW_MAX_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
