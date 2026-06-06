@@ -18,7 +18,15 @@
  * Deleting a deck dispatches `vibedeck:deck-deleted` { topic, slug } so the
  * host page can refresh; the component dispatches `vibedeck:ready` once the
  * API is on window.
+ *
+ * `embeddable` (default true) renders the "Embed" button + snippet panel. The
+ * embed widget itself passes embeddable={false} so its own modal has no
+ * Embed/Edit/Delete.
  */
+interface Props {
+  embeddable?: boolean;
+}
+const { embeddable = true } = Astro.props;
 ---
 
 <div class="modal" data-modal hidden>
@@ -37,9 +45,31 @@
     </header>
     <iframe class="modal__frame" data-modal-frame title="Deck"></iframe>
     <footer class="modal__foot" data-modal-foot hidden>
-      <a class="modal__edit" data-modal-edit>Edit</a>
-      <button class="modal__del" type="button" data-modal-delete>Delete</button>
+      {embeddable && (
+        <button class="modal__ghost" type="button" data-modal-embed>Embed</button>
+      )}
+      <span class="modal__foot-gap"></span>
+      <a class="modal__edit" data-modal-edit hidden>Edit</a>
+      <button class="modal__del" type="button" data-modal-delete hidden>Delete</button>
     </footer>
+    {embeddable && (
+      <div class="modal__embedpanel" data-embed-panel hidden>
+        <label class="modal__embed-label" for="vd-embed-code">
+          Embed code — paste into any page that accepts HTML:
+        </label>
+        <textarea
+          class="modal__embed-code"
+          id="vd-embed-code"
+          data-embed-code
+          readonly
+          rows="3"
+          spellcheck="false"></textarea>
+        <div class="modal__embed-actions">
+          <button class="modal__ghost" type="button" data-embed-copy>Copy</button>
+          <button class="modal__ghost" type="button" data-embed-close>Done</button>
+        </div>
+      </div>
+    )}
   </div>
 </div>
 
@@ -166,16 +196,67 @@
   function applyOwnerActions(deck: Deck) {
     const foot = $<HTMLElement>("[data-modal-foot]");
     const edit = $<HTMLAnchorElement>("[data-modal-edit]");
+    const del = $<HTMLButtonElement>("[data-modal-delete]");
+    const hasEmbed = !!$("[data-modal-embed]"); // present unless embeddable={false}
     const reveal = (owned: boolean) => {
-      if (foot) foot.hidden = !owned;
-      if (owned && edit) {
-        edit.href = `/account/edit?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
+      // Footer shows if there's an Embed button (any viewer) or owner actions.
+      if (foot) foot.hidden = !(hasEmbed || owned);
+      if (edit) {
+        edit.hidden = !owned;
+        if (owned)
+          edit.href = `/account/edit?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
       }
+      if (del) del.hidden = !owned;
     };
-    reveal(false); // default: no owner actions until proven owned
+    reveal(false); // Embed shows immediately; Edit/Delete only once owned.
     ownedReady.then(() => {
       if (activeDeck === deck) reveal(isOwned(deck));
     });
+  }
+
+  function embedSnippet(d: Deck): string {
+    const origin = window.location.origin;
+    const title = (d.title || "Deck").replace(/"/g, "&quot;");
+    return (
+      `<iframe src="${origin}/embed/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}"` +
+      ` width="420" height="560" style="border:0;border-radius:8px;max-width:100%" loading="lazy"` +
+      ` title="${title}"></iframe>`
+    );
+  }
+
+  function openEmbedPanel() {
+    const d = activeDeck;
+    const panel = $<HTMLElement>("[data-embed-panel]");
+    const code = $<HTMLTextAreaElement>("[data-embed-code]");
+    if (!d || !panel || !code) return;
+    code.value = embedSnippet(d);
+    panel.hidden = false;
+    code.focus();
+    code.select();
+  }
+
+  function hideEmbedPanel() {
+    $<HTMLElement>("[data-embed-panel]")?.setAttribute("hidden", "");
+  }
+
+  async function copyEmbed() {
+    const code = $<HTMLTextAreaElement>("[data-embed-code]");
+    const btn = $<HTMLButtonElement>("[data-embed-copy]");
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code.value);
+    } catch {
+      code.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* clipboard unavailable — the code is shown for manual copy */
+      }
+    }
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => (btn.textContent = "Copy"), 1500);
+    }
   }
 
   function openDeck(deck: Deck) {
@@ -185,6 +266,7 @@
     const titleEl = $<HTMLElement>("[data-modal-title]");
     if (!modal || !frame) return;
     if (titleEl) titleEl.textContent = deck.title;
+    hideEmbedPanel();
     applyOwnerActions(deck);
     // Bridge Escape out of the same-origin reader iframe (in case focus is
     // inside it) so it still closes this modal.
@@ -213,6 +295,7 @@
     if (!modal) return;
     modal.setAttribute("hidden", "");
     setFullscreen(false);
+    hideEmbedPanel();
     if (frame) {
       frame.onload = null;
       frame.src = "about:blank";
@@ -241,6 +324,9 @@
     $("[data-modal-close]")?.addEventListener("click", closeModal);
     $("[data-modal-delete]")?.addEventListener("click", deleteActiveDeck);
     $("[data-modal-expand]")?.addEventListener("click", toggleFullscreen);
+    $("[data-modal-embed]")?.addEventListener("click", openEmbedPanel);
+    $("[data-embed-copy]")?.addEventListener("click", copyEmbed);
+    $("[data-embed-close]")?.addEventListener("click", hideEmbedPanel);
     $("[data-modal]")?.addEventListener("click", (e) => {
       if (e.target === e.currentTarget) closeModal();
     });
@@ -466,5 +552,58 @@
   }
   .modal__del:hover {
     border-color: #f87171;
+  }
+  .modal__edit[hidden],
+  .modal__del[hidden] {
+    display: none;
+  }
+  /* Pushes Edit/Delete to the right while Embed stays on the left. */
+  .modal__foot-gap {
+    flex: 1;
+  }
+  .modal__ghost {
+    padding: 0.55rem 1.1rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .modal__ghost:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+
+  /* Embed snippet panel */
+  .modal__embedpanel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid var(--vd-card-border);
+  }
+  .modal__embedpanel[hidden] {
+    display: none;
+  }
+  .modal__embed-label {
+    font-size: 0.85rem;
+    color: var(--vd-text-muted);
+  }
+  .modal__embed-code {
+    width: 100%;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 0.6rem 0.7rem;
+    resize: vertical;
+  }
+  .modal__embed-actions {
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

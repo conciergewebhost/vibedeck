@@ -82,6 +82,15 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
       if (!grid) continue;
       for (const d of g.decks) grid.append(V.buildCard(d));
     }
+    // Deep-link: /decks?deck=<topic>/<slug> opens that deck's modal on load
+    // (used by the "View on v2.vibedeck.online" link from an embed widget).
+    const want = new URLSearchParams(location.search).get("deck");
+    if (want) {
+      const target = groups
+        .flatMap((g) => g.decks)
+        .find((d) => `${d.topic}/${d.slug}` === want);
+      if (target) V.openDeck(target);
+    }
   });
 
   // When the owner deletes a deck from the modal, drop its card (and the topic

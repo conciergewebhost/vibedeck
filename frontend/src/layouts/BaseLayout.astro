@@ -27,6 +27,9 @@ interface Props {
   // Show the sitewide navbar. On by default for every page; the immersive
   // reader opts out so it stays full-viewport.
   showNav?: boolean;
+  // Show the floating dark/light toggle. On by default; the embed widget
+  // hides it to keep the embedded card clean.
+  showModeToggle?: boolean;
   // Social/SEO description and OG card image (brand default).
   description?: string;
   ogImage?: string;
@@ -37,6 +40,7 @@ const {
   title,
   theme = "operazione-stile",
   showNav = true,
+  showModeToggle = true,
   description = "Vibedeck turns your markdown files into beautiful, paginated card decks. Mobile-first. Distraction-free.",
   ogImage = "/og-image.png",
 } = Astro.props;
@@ -110,14 +114,18 @@ const canonical = Astro.site
     <slot name="head" />
   </head>
   <body>
-    <button
-      class="mode-toggle"
-      data-mode-toggle
-      type="button"
-      aria-label="Toggle light or dark mode"
-    >
-      <span data-mode-icon aria-hidden="true">☾</span>
-    </button>
+    {
+      showModeToggle && (
+        <button
+          class="mode-toggle"
+          data-mode-toggle
+          type="button"
+          aria-label="Toggle light or dark mode"
+        >
+          <span data-mode-icon aria-hidden="true">☾</span>
+        </button>
+      )
+    }
 
     {showNav && <NavBar />}
 
