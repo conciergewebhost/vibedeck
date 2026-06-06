@@ -90,6 +90,8 @@ type: summary
 - Add a `:root[data-mode="light"]` block if you want light mode
 - Layer ancestor-chain rules for any deeper restyling
 - Set `theme: my-theme` in a deck and reload
+
+<a href="/themes/default.css" download>↓ Download default.css</a> to start from.
 ---
 type: quote
 ---
