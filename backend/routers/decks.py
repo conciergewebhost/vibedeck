@@ -30,7 +30,7 @@ from schemas.deck import (
     UploadResult,
 )
 from services import decks as decks_service
-from services.auth import get_current_user
+from services.auth import get_current_admin, get_current_user
 from services.decks import DeckConflict, DeckNotOwned, DeckTooLarge, DeckUnsafe
 from services.parser import DeckParseError, parse_deck
 from services.ratelimit import SlidingWindowLimiter, client_ip
@@ -52,9 +52,9 @@ _PREVIEW_MAX_PER_MIN = 60
 async def upload_deck(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> UploadResult:
-    """Validate, store, and index an uploaded markdown deck (auth required).
+    """Validate, store, and index an uploaded markdown deck (admin only).
 
     Delegates to create_user_deck so uploads get the same safety as the portal
     editor: a size cap, the no-code guard, and a cross-user conflict check (a
@@ -153,9 +153,9 @@ def preview_deck(body: PreviewInput, request: Request) -> DeckDetail:
 @router.get("", response_model=list[AdminDeckItem])
 def list_decks(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # auth gate
+    current_user: User = Depends(get_current_admin),  # admin only
 ) -> list[AdminDeckItem]:
-    """List all indexed decks (auth required) — for the admin surface."""
+    """List all indexed decks (admin only) — for the admin surface."""
     return decks_service.list_all_decks(db)
 
 
@@ -304,9 +304,9 @@ def delete_deck(
     topic_slug: str,
     deck_slug: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # auth gate
+    current_user: User = Depends(get_current_admin),  # admin only (any deck)
 ) -> Response:
-    """Delete a deck: file + DB rows + orphan prune (auth required)."""
+    """Delete any deck: file + DB rows + orphan prune (admin only)."""
     deleted = decks_service.delete_deck_by_slugs(db, topic_slug, deck_slug)
     if not deleted:
         raise HTTPException(status_code=404, detail="Deck not found")

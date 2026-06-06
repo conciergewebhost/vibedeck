@@ -106,3 +106,4 @@ class AdminDeckItem(BaseModel):
     url: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    owner_email: str | None = None  # populated for the admin all-decks list

@@ -14,7 +14,7 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -147,3 +147,23 @@ def get_current_user(
     if user is None or not user.is_active:
         raise _credentials_exc
     return user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Resolve the current user and require the admin (owner) account, else 403.
+
+    Admin == the configured UPLOAD_OWNER_EMAIL account (the same account the
+    /admin upload-token flow mints a JWT for; the owner can also sign in by
+    magic link).
+    """
+    if current_user.email != settings.UPLOAD_OWNER_EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+    return current_user
+
+
+def record_login(db: Session, user: User) -> None:
+    """Stamp the user's last-login time — call when a session token is issued."""
+    user.last_login_at = func.now()
+    db.commit()

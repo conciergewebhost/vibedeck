@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from config import settings
 from models import Deck, Keyword, Topic, deck_keywords
@@ -97,11 +97,12 @@ def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
 
 
 def list_all_decks(db: Session) -> list[AdminDeckItem]:
-    """All indexed decks, for the admin management list."""
+    """All indexed decks, for the admin management list (incl. owner email)."""
     decks = db.scalars(
-        select(Deck).join(Topic, Deck.topic_id == Topic.id).order_by(
-            Topic.slug, Deck.slug
-        )
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .options(joinedload(Deck.owner))
+        .order_by(Topic.slug, Deck.slug)
     ).all()
     return [
         AdminDeckItem(
@@ -114,6 +115,7 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
             url=f"/{d.topic.slug}/{d.slug}",
             created_at=d.created_at,
             updated_at=d.updated_at,
+            owner_email=d.owner.email if d.owner else None,
         )
         for d in decks
     ]

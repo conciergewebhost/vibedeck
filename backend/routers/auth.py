@@ -27,6 +27,7 @@ from services.auth import (
     create_magic_token,
     decode_magic_token,
     get_or_create_passwordless_user,
+    record_login,
 )
 from services.email import send_magic_link
 from services.ratelimit import SlidingWindowLimiter, client_ip
@@ -61,6 +62,7 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    record_login(db, user)
     return Token(access_token=create_access_token(subject=user.email))
 
 
@@ -88,6 +90,7 @@ def upload_token(body: UploadTokenRequest, db: Session = Depends(get_db)) -> Tok
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Owner account not provisioned",
         )
+    record_login(db, owner)
     return Token(access_token=create_access_token(subject=owner.email))
 
 
@@ -180,4 +183,5 @@ def verify(body: VerifyInput, db: Session = Depends(get_db)) -> Token:
                 detail="This link is invalid or has expired.",
             )
 
+    record_login(db, user)
     return Token(access_token=create_access_token(subject=user.email))

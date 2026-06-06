@@ -23,6 +23,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Updated each time a session token is issued (see services.auth.record_login).
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     decks: Mapped[list["Deck"]] = relationship(  # noqa: F821
         back_populates="owner"

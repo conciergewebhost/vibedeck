@@ -81,6 +81,11 @@ class TestUploadSecurity(unittest.TestCase):
         db.close()
         return {"Authorization": f"Bearer {create_access_token(subject=email)}"}
 
+    def _mine(self, content, auth):
+        return self.client.post(
+            "/api/decks/mine", json={"markdown": content}, headers=auth
+        )
+
     def _upload(self, content, auth):
         return self.client.post(
             "/api/decks/upload",
@@ -88,30 +93,36 @@ class TestUploadSecurity(unittest.TestCase):
             headers=auth,
         )
 
-    def test_upload_blocks_cross_user_overwrite(self):
+    # Regular users create via /api/decks/mine; the guards live in
+    # create_user_deck, so they apply on that path too.
+    def test_mine_blocks_cross_user_overwrite(self):
         a = self._auth("a@e.com")
         b = self._auth("b@e.com")
-        self.assertEqual(self._upload(DECK, a).status_code, 201)
-        # B uploads a deck with the same topic+title → same filename → must be
+        self.assertEqual(self._mine(DECK, a).status_code, 201)
+        # B creates a deck with the same topic+title → same filename → must be
         # rejected, not silently overwrite A's deck.
-        r = self._upload(DECK, b)
-        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self._mine(DECK, b).status_code, 409)
 
-    def test_upload_rejects_code(self):
+    def test_mine_rejects_code(self):
         a = self._auth("a@e.com")
         evil = DECK + "---\ntype: concept\n---\n<script>alert(1)</script>\n"
-        self.assertEqual(self._upload(evil, a).status_code, 400)
+        self.assertEqual(self._mine(evil, a).status_code, 400)
 
-    def test_upload_rejects_oversized(self):
+    def test_mine_rejects_oversized(self):
         a = self._auth("a@e.com")
         big = DECK + "---\ntype: concept\n---\n" + ("a" * 300_000) + "\n"
-        self.assertEqual(self._upload(big, a).status_code, 413)
+        self.assertEqual(self._mine(big, a).status_code, 413)
 
-    def test_oversized_via_mine_json(self):
-        a = self._auth("a@e.com")
+    # /api/decks/upload is admin-only (owner account); the same guards apply.
+    def test_admin_upload_rejects_oversized(self):
+        owner = self._auth("owner@example.com")  # == UPLOAD_OWNER_EMAIL in test env
         big = DECK + "---\ntype: concept\n---\n" + ("a" * 300_000) + "\n"
-        r = self.client.post("/api/decks/mine", json={"markdown": big}, headers=a)
-        self.assertEqual(r.status_code, 413)
+        self.assertEqual(self._upload(big, owner).status_code, 413)
+
+    def test_admin_upload_rejects_code(self):
+        owner = self._auth("owner@example.com")
+        evil = DECK + "---\ntype: concept\n---\n<script>alert(1)</script>\n"
+        self.assertEqual(self._upload(evil, owner).status_code, 400)
 
 
 class TestPreviewThrottle(unittest.TestCase):
