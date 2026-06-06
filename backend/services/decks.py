@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Deck, Keyword, Topic, deck_keywords
-from schemas.deck import AdminDeckItem, Card, DeckDetail
+from schemas.deck import AdminDeckItem, Card, DeckDetail, PublicDeckItem
 from services.indexing import deck_filename, index_deck_file
 from services.parser import parse_deck
 
@@ -71,6 +71,33 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
             author=d.author,
             card_count=d.card_count,
             filename=d.filename,
+            url=f"/{d.topic.slug}/{d.slug}",
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+        for d in decks
+    ]
+
+
+def list_public_decks(db: Session) -> list[PublicDeckItem]:
+    """All decks for the public library grid, with their topic display name.
+
+    (No public/private flag exists yet, so this is every indexed deck; it will
+    filter to public ones once that toggle lands.)
+    """
+    decks = db.scalars(
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .order_by(Topic.display_name, Deck.title)
+    ).all()
+    return [
+        PublicDeckItem(
+            topic=d.topic.slug,
+            topic_name=d.topic.display_name,
+            slug=d.slug,
+            title=d.title,
+            author=d.author,
+            card_count=d.card_count,
             url=f"/{d.topic.slug}/{d.slug}",
             created_at=d.created_at,
             updated_at=d.updated_at,

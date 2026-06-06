@@ -2,15 +2,13 @@
 /**
  * /account — the logged-in user's deck portal.
  *
- * Session-gated client-side (redirects to /login without a session). Each
- * deck is shown as a card: a first-slide thumbnail (the reader in embed mode,
- * via iframe), the title, and created / last-edited dates. Clicking the
- * thumbnail or title opens a modal that displays the full interactive deck,
- * with Edit and Delete (confirm-first) at the bottom. All API calls carry the
- * vd_session JWT as a Bearer header; a 401 clears the session and bounces to
- * /login. Framework-free, mirroring admin.astro but scoped to the user.
+ * Session-gated client-side (redirects to /login without a session). Lists the
+ * user's own decks as thumbnail cards via the shared DeckModal component; each
+ * opens the expandable viewer (with owner Edit/Delete). Plus a "New deck"
+ * entry point, the account email, and Log out.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
+import DeckModal from "../components/DeckModal.astro";
 ---
 
 <BaseLayout title="My decks — Vibedeck">
@@ -27,94 +25,36 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     </header>
 
     <p class="portal__msg" data-msg role="status" hidden></p>
-    <ul class="portal__decks" data-deck-list></ul>
+    <ul class="deckgrid" data-deck-list></ul>
   </main>
 
-  <!-- Deck view modal (one instance, populated per click) -->
-  <div class="modal" data-modal hidden>
-    <div class="modal__panel" role="dialog" aria-modal="true" aria-label="Deck preview">
-      <header class="modal__head">
-        <h2 class="modal__title" data-modal-title></h2>
-        <button class="modal__close" type="button" data-modal-close aria-label="Close">✕</button>
-      </header>
-      <iframe class="modal__frame" data-modal-frame title="Deck preview"></iframe>
-      <footer class="modal__foot">
-        <a class="portal__btn" data-modal-edit>Edit</a>
-        <button class="modal__del" type="button" data-modal-delete>Delete</button>
-      </footer>
-    </div>
-  </div>
+  <DeckModal />
 </BaseLayout>
 
 <script>
   const SESSION_KEY = "vd_session";
-
   const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
-  type MyDeck = {
-    topic: string;
-    slug: string;
-    title: string;
-    author: string;
-    card_count: number;
-    url: string;
-    created_at: string | null;
-    updated_at: string | null;
-  };
+  const jwt = () => localStorage.getItem(SESSION_KEY);
+  const authHeaders = () => ({ Authorization: `Bearer ${jwt()}` });
 
-  let activeDeck: MyDeck | null = null;
-
-  function jwt(): string | null {
-    return localStorage.getItem(SESSION_KEY);
-  }
-
-  function requireSession(): string {
-    const token = jwt();
-    if (!token) {
+  function requireSession() {
+    if (!jwt()) {
       location.replace("/login");
       throw new Error("no session");
     }
-    return token;
   }
-
-  function authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${jwt()}` };
-  }
-
   function logout() {
     localStorage.removeItem(SESSION_KEY);
     location.replace("/login");
   }
-
   function handle401() {
     localStorage.removeItem(SESSION_KEY);
     location.replace("/login");
   }
-
-  function editHref(d: MyDeck): string {
-    return `/account/edit?topic=${encodeURIComponent(d.topic)}&deck=${encodeURIComponent(d.slug)}`;
-  }
-
-  function fmtDate(iso: string | null): string | null {
-    if (!iso) return null;
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime())
-      ? null
-      : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  }
-
-  // Build the "Created … · Edited …" line. "Edited" only shows when the deck
-  // has actually changed since creation (more than a couple seconds apart).
-  function datesLine(d: MyDeck): string {
-    const created = fmtDate(d.created_at);
-    const parts: string[] = [];
-    if (created) parts.push(`Created ${created}`);
-    if (d.created_at && d.updated_at) {
-      const gap = new Date(d.updated_at).getTime() - new Date(d.created_at).getTime();
-      const edited = fmtDate(d.updated_at);
-      if (gap > 2000 && edited) parts.push(`Edited ${edited}`);
-    }
-    return parts.join(" · ");
+  function whenReady(cb: () => void) {
+    if ((window as any).Vibedeck) cb();
+    else document.addEventListener("vibedeck:ready", cb, { once: true });
   }
 
   async function loadMe() {
@@ -128,11 +68,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
   async function loadDecks() {
     const res = await fetch("/api/decks/mine", { headers: authHeaders() });
     if (res.status === 401) return handle401();
-    const decks: MyDeck[] = await res.json();
-    renderDecks(decks);
-  }
-
-  function renderDecks(decks: MyDeck[]) {
+    const decks = await res.json();
     const list = $<HTMLUListElement>("[data-deck-list]");
     if (!list) return;
     list.replaceChildren();
@@ -143,113 +79,16 @@ import BaseLayout from "../layouts/BaseLayout.astro";
       list.append(li);
       return;
     }
-    for (const d of decks) {
-      const li = document.createElement("li");
-      li.className = "deckcard";
-
-      // Thumbnail: the reader in embed mode (first slide, no chrome), scaled
-      // down inside a fixed box and non-interactive.
-      const thumb = document.createElement("button");
-      thumb.className = "deckcard__thumb";
-      thumb.type = "button";
-      thumb.setAttribute("aria-label", `Open ${d.title}`);
-      const frame = document.createElement("iframe");
-      frame.src = `${d.url}?embed=1`;
-      frame.loading = "lazy";
-      frame.tabIndex = -1;
-      frame.setAttribute("aria-hidden", "true");
-      frame.setAttribute("scrolling", "no");
-      // Set inline too: clicks must not land inside the iframe (they wouldn't
-      // bubble out to the button); this makes the iframe click-transparent so
-      // the button below receives the click. (Belt-and-suspenders with CSS.)
-      frame.style.pointerEvents = "none";
-      thumb.append(frame);
-      thumb.addEventListener("click", () => openModal(d));
-
-      // Info: clickable title + dates.
-      const info = document.createElement("div");
-      info.className = "deckcard__info";
-
-      const title = document.createElement("button");
-      title.className = "deckcard__title";
-      title.type = "button";
-      title.textContent = d.title;
-      title.addEventListener("click", () => openModal(d));
-
-      const dates = document.createElement("p");
-      dates.className = "deckcard__dates";
-      dates.textContent = datesLine(d);
-
-      const meta = document.createElement("p");
-      meta.className = "deckcard__meta";
-      meta.textContent = `${d.card_count} card${d.card_count === 1 ? "" : "s"} · /${d.topic}/${d.slug}`;
-
-      info.append(title, dates, meta);
-      li.append(thumb, info);
-      list.append(li);
-    }
-  }
-
-  // ── Modal ────────────────────────────────────────────────────────────
-  function openModal(d: MyDeck) {
-    activeDeck = d;
-    const modal = $<HTMLElement>("[data-modal]");
-    const frame = $<HTMLIFrameElement>("[data-modal-frame]");
-    const titleEl = $<HTMLElement>("[data-modal-title]");
-    const editEl = $<HTMLAnchorElement>("[data-modal-edit]");
-    if (!modal || !frame) return;
-    if (titleEl) titleEl.textContent = d.title;
-    if (editEl) editEl.href = editHref(d);
-    frame.src = d.url; // full interactive reader
-    modal.removeAttribute("hidden");
-    document.body.style.overflow = "hidden";
-  }
-
-  function closeModal() {
-    const modal = $<HTMLElement>("[data-modal]");
-    const frame = $<HTMLIFrameElement>("[data-modal-frame]");
-    if (!modal) return;
-    modal.setAttribute("hidden", "");
-    if (frame) frame.src = "about:blank"; // stop the reader / free it
-    document.body.style.overflow = "";
-    activeDeck = null;
-  }
-
-  async function deleteActiveDeck() {
-    const d = activeDeck;
-    if (!d) return;
-    if (!confirm(`Delete “${d.title}”? This removes the deck and its file.`)) return;
-    const res = await fetch(
-      `/api/decks/mine/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
-      { method: "DELETE", headers: authHeaders() },
-    );
-    if (res.status === 401) return handle401();
-    if (res.ok || res.status === 404) {
-      closeModal();
-      loadDecks();
-    } else {
-      const msg = $<HTMLElement>("[data-msg]");
-      if (msg) {
-        msg.textContent = "Could not delete that deck.";
-        msg.hidden = false;
-      }
-    }
+    const V = (window as any).Vibedeck;
+    for (const d of decks) list.append(V.buildCard(d));
   }
 
   function initPortal() {
     requireSession();
     $("[data-logout]")?.addEventListener("click", logout);
-    $("[data-modal-close]")?.addEventListener("click", closeModal);
-    $("[data-modal-delete]")?.addEventListener("click", deleteActiveDeck);
-    // Backdrop click closes (but not clicks inside the panel).
-    $("[data-modal]")?.addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) closeModal();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !$("[data-modal]")?.hasAttribute("hidden")) closeModal();
-    });
+    document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
-    loadDecks();
+    whenReady(loadDecks);
   }
 
   initPortal();
@@ -310,170 +149,5 @@ import BaseLayout from "../layouts/BaseLayout.astro";
   }
   .portal__empty {
     color: var(--vd-text-muted);
-  }
-  .portal__decks {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  /* Deck-card styles live in the is:global block below — the cards are built
-     in client JS, which Astro's scoped (data-astro-cid) styles don't reach. */
-
-  /* ── Deck modal ── */
-  .modal {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.6);
-  }
-  .modal[hidden] {
-    display: none;
-  }
-  .modal__panel {
-    display: flex;
-    flex-direction: column;
-    width: min(92vw, 64rem);
-    height: min(86vh, 56rem);
-    background: var(--vd-card-bg);
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    overflow: hidden;
-  }
-  .modal__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--vd-card-border);
-  }
-  .modal__title {
-    margin: 0;
-    font-size: 1.1rem;
-    color: var(--vd-heading);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .modal__close {
-    flex: none;
-    background: none;
-    border: 0;
-    color: var(--vd-text);
-    font-size: 1.25rem;
-    line-height: 1;
-    cursor: pointer;
-  }
-  .modal__close:hover {
-    color: var(--vd-accent);
-  }
-  .modal__frame {
-    flex: 1;
-    width: 100%;
-    border: 0;
-    background: var(--vd-bg);
-  }
-  .modal__foot {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--vd-card-border);
-  }
-  .modal__del {
-    padding: 0.55rem 1.1rem;
-    background: transparent;
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    color: #f87171;
-    font: inherit;
-    cursor: pointer;
-  }
-  .modal__del:hover {
-    border-color: #f87171;
-  }
-</style>
-
-<!-- Deck cards are created in client JS, so their styles must be global
-     (scoped styles only match elements rendered by Astro at build time). -->
-<style is:global>
-  .deckcard {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    padding: 0.75rem;
-    background: var(--vd-card-bg);
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-  }
-  .deckcard__thumb {
-    flex: none;
-    width: 240px;
-    height: 150px;
-    padding: 0;
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    overflow: hidden;
-    background: var(--vd-bg);
-    cursor: pointer;
-    position: relative;
-  }
-  .deckcard__thumb:hover {
-    border-color: var(--vd-accent);
-  }
-  /* Render the reader at a large logical size and scale it down so the first
-     slide's text stays crisp. 960×600 × 0.25 = 240×150 (the box above). */
-  .deckcard__thumb iframe {
-    width: 960px;
-    height: 600px;
-    border: 0;
-    transform: scale(0.25);
-    transform-origin: top left;
-    pointer-events: none;
-  }
-  .deckcard__info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 0;
-  }
-  .deckcard__title {
-    align-self: flex-start;
-    background: none;
-    border: 0;
-    padding: 0;
-    margin: 0;
-    text-align: left;
-    font-family: var(--vd-font-heading);
-    font-size: 1.25rem;
-    line-height: 1.1;
-    color: var(--vd-heading);
-    cursor: pointer;
-  }
-  .deckcard__title:hover {
-    color: var(--vd-accent);
-  }
-  .deckcard__dates {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--vd-text);
-  }
-  .deckcard__meta {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--vd-text-muted);
-  }
-  @media (max-width: 32rem) {
-    .deckcard {
-      flex-direction: column;
-      align-items: flex-start;
-    }
   }
 </style>

@@ -27,6 +27,7 @@ from schemas.deck import (
     DeckDetail,
     DeckSource,
     PreviewInput,
+    PublicDeckItem,
     SaveDeckInput,
     UploadResult,
 )
@@ -128,6 +129,12 @@ def list_decks(
 ) -> list[AdminDeckItem]:
     """List all indexed decks (auth required) — for the admin surface."""
     return decks_service.list_all_decks(db)
+
+
+@router.get("/public", response_model=list[PublicDeckItem])
+def list_public_decks(db: Session = Depends(get_db)) -> list[PublicDeckItem]:
+    """All decks for the public library grid (no auth)."""
+    return decks_service.list_public_decks(db)
 
 
 # ── Owner-scoped portal endpoints (session-authed, own decks only) ────────

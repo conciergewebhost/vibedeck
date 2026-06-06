@@ -64,7 +64,21 @@ async function getJson<T>(path: string): Promise<T | null> {
   return (await res.json()) as T;
 }
 
+export interface PublicDeckItem {
+  topic: string; // slug
+  topic_name: string;
+  slug: string;
+  title: string;
+  author: string;
+  card_count: number;
+  url: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export const fetchTopics = () => getJson<TopicSummary[]>("/api/topics");
+export const fetchPublicDecks = () =>
+  getJson<PublicDeckItem[]>("/api/decks/public");
 export const fetchTopic = (slug: string) =>
   getJson<TopicDetail>(`/api/topics/${encodeURIComponent(slug)}`);
 export const fetchDeck = (topic: string, deck: string) =>

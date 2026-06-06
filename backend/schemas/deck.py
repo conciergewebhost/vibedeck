@@ -75,6 +75,21 @@ class UploadResult(BaseModel):
     url: str  # reader path, e.g. /z13/the-12-houses
 
 
+class PublicDeckItem(BaseModel):
+    """A deck for the public library grid (grouped by topic). No owner/path
+    info; ownership-gated actions are resolved client-side."""
+
+    topic: str  # topic slug
+    topic_name: str  # topic display name (section header)
+    slug: str
+    title: str
+    author: str
+    card_count: int
+    url: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class AdminDeckItem(BaseModel):
     """A deck row for the admin management list.
 

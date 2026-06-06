@@ -10,6 +10,14 @@ html, body {
   min-height: 100%;
 }
 
+/* "Present" mode: when the reader is shown full-screen in the deck modal, the
+   host toggles this class on the iframe's <html> to scale everything up. All
+   sizes are rem-based (card width, type, padding), so a larger root font-size
+   enlarges the content uniformly to fill the bigger canvas. */
+:root.vd-present {
+  font-size: 150%;
+}
+
 body {
   background: var(--vd-bg);
   color: var(--vd-text);

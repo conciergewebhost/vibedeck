@@ -1,0 +1,470 @@
+---
+/**
+ * DeckModal — the shared deck browser used by the portal (/account) and the
+ * public library (/decks).
+ *
+ * Renders one modal (the expandable deck viewer) and exposes a small global
+ * API on `window.Vibedeck`:
+ *   - buildCard(deck)  → a wired thumbnail card <li> (click opens the modal)
+ *   - openDeck(deck)   → open the modal for a deck
+ *   - ownedReady       → a promise that resolves once ownership is known
+ *   - isOwned(deck)    → whether the signed-in viewer owns the deck
+ *
+ * Edit/Delete appear only for decks the viewer owns (resolved client-side
+ * from /api/decks/mine). Deck shape: { topic, slug, title, url, card_count,
+ * created_at, updated_at }. Card + modal styles are global because the cards
+ * are created in JS (Astro's scoped styles don't reach JS-built nodes).
+ *
+ * Deleting a deck dispatches `vibedeck:deck-deleted` { topic, slug } so the
+ * host page can refresh; the component dispatches `vibedeck:ready` once the
+ * API is on window.
+ */
+---
+
+<div class="modal" data-modal hidden>
+  <div class="modal__panel" role="dialog" aria-modal="true" aria-label="Deck">
+    <header class="modal__head">
+      <h2 class="modal__title" data-modal-title></h2>
+      <div class="modal__controls">
+        <button
+          class="modal__icon"
+          type="button"
+          data-modal-expand
+          aria-label="Expand to full screen"
+          aria-pressed="false">⤢</button>
+        <button class="modal__icon" type="button" data-modal-close aria-label="Close">✕</button>
+      </div>
+    </header>
+    <iframe class="modal__frame" data-modal-frame title="Deck"></iframe>
+    <footer class="modal__foot" data-modal-foot hidden>
+      <a class="modal__edit" data-modal-edit>Edit</a>
+      <button class="modal__del" type="button" data-modal-delete>Delete</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+  const SESSION_KEY = "vd_session";
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+
+  type Deck = {
+    topic: string;
+    slug: string;
+    title: string;
+    url: string;
+    card_count: number;
+    created_at: string | null;
+    updated_at: string | null;
+  };
+
+  let activeDeck: Deck | null = null;
+  const ownedKeys = new Set<string>();
+
+  const jwt = () => localStorage.getItem(SESSION_KEY);
+  const keyOf = (t: string, s: string) => `${t}/${s}`;
+  const isOwned = (d: Deck) => ownedKeys.has(keyOf(d.topic, d.slug));
+
+  // Resolve which decks the viewer owns (for Edit/Delete). Anonymous → none.
+  const ownedReady: Promise<void> = (async () => {
+    const token = jwt();
+    if (!token) return;
+    try {
+      const res = await fetch("/api/decks/mine", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        for (const d of await res.json()) ownedKeys.add(keyOf(d.topic, d.slug));
+      }
+    } catch {
+      /* offline / no session — leave owned set empty */
+    }
+  })();
+
+  function fmtDate(iso: string | null): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? null
+      : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function datesLine(d: Deck): string {
+    const created = fmtDate(d.created_at);
+    const parts: string[] = [];
+    if (created) parts.push(`Created ${created}`);
+    if (d.created_at && d.updated_at) {
+      const gap = new Date(d.updated_at).getTime() - new Date(d.created_at).getTime();
+      const edited = fmtDate(d.updated_at);
+      if (gap > 2000 && edited) parts.push(`Edited ${edited}`);
+    }
+    return parts.join(" · ");
+  }
+
+  function buildCard(deck: Deck): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "deckcard";
+    li.dataset.deckKey = keyOf(deck.topic, deck.slug);
+
+    const thumb = document.createElement("button");
+    thumb.className = "deckcard__thumb";
+    thumb.type = "button";
+    thumb.setAttribute("aria-label", `Open ${deck.title}`);
+    const frame = document.createElement("iframe");
+    frame.src = `${deck.url}?embed=1`;
+    frame.loading = "lazy";
+    frame.tabIndex = -1;
+    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("scrolling", "no");
+    frame.style.pointerEvents = "none"; // clicks fall through to the button
+    thumb.append(frame);
+    thumb.addEventListener("click", () => openDeck(deck));
+
+    const info = document.createElement("div");
+    info.className = "deckcard__info";
+    const title = document.createElement("button");
+    title.className = "deckcard__title";
+    title.type = "button";
+    title.textContent = deck.title;
+    title.addEventListener("click", () => openDeck(deck));
+    const dates = document.createElement("p");
+    dates.className = "deckcard__dates";
+    dates.textContent = datesLine(deck);
+    const meta = document.createElement("p");
+    meta.className = "deckcard__meta";
+    meta.textContent = `${deck.card_count} card${deck.card_count === 1 ? "" : "s"} · /${deck.topic}/${deck.slug}`;
+    info.append(title, dates, meta);
+
+    li.append(thumb, info);
+    return li;
+  }
+
+  // ── Modal ──────────────────────────────────────────────────────────────
+  function setFullscreen(on: boolean) {
+    const modal = $<HTMLElement>("[data-modal]");
+    const btn = $<HTMLButtonElement>("[data-modal-expand]");
+    const frame = $<HTMLIFrameElement>("[data-modal-frame]");
+    if (!modal) return;
+    modal.classList.toggle("modal--full", on);
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(on));
+      btn.setAttribute("aria-label", on ? "Exit full screen" : "Expand to full screen");
+      btn.textContent = on ? "⤡" : "⤢";
+    }
+    // Scale the reader content up to match the larger canvas (same-origin).
+    try {
+      frame?.contentDocument?.documentElement.classList.toggle("vd-present", on);
+    } catch {
+      /* cross-origin (shouldn't happen) */
+    }
+  }
+
+  function toggleFullscreen() {
+    const modal = $<HTMLElement>("[data-modal]");
+    setFullscreen(!modal?.classList.contains("modal--full"));
+  }
+
+  function applyOwnerActions(deck: Deck) {
+    const foot = $<HTMLElement>("[data-modal-foot]");
+    const edit = $<HTMLAnchorElement>("[data-modal-edit]");
+    const reveal = (owned: boolean) => {
+      if (foot) foot.hidden = !owned;
+      if (owned && edit) {
+        edit.href = `/account/edit?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
+      }
+    };
+    reveal(false); // default: no owner actions until proven owned
+    ownedReady.then(() => {
+      if (activeDeck === deck) reveal(isOwned(deck));
+    });
+  }
+
+  function openDeck(deck: Deck) {
+    activeDeck = deck;
+    const modal = $<HTMLElement>("[data-modal]");
+    const frame = $<HTMLIFrameElement>("[data-modal-frame]");
+    const titleEl = $<HTMLElement>("[data-modal-title]");
+    if (!modal || !frame) return;
+    if (titleEl) titleEl.textContent = deck.title;
+    applyOwnerActions(deck);
+    // Bridge Escape out of the same-origin reader iframe (in case focus is
+    // inside it) so it still closes this modal.
+    frame.onload = () => {
+      try {
+        frame.contentDocument?.addEventListener("keydown", (ev) => {
+          if (ev.key === "Escape") closeModal();
+          else if (ev.key === "f" || ev.key === "F") {
+            ev.preventDefault();
+            toggleFullscreen();
+          }
+        });
+      } catch {
+        /* cross-origin (shouldn't happen) */
+      }
+    };
+    frame.src = deck.url; // full interactive reader
+    setFullscreen(false);
+    modal.removeAttribute("hidden");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeModal() {
+    const modal = $<HTMLElement>("[data-modal]");
+    const frame = $<HTMLIFrameElement>("[data-modal-frame]");
+    if (!modal) return;
+    modal.setAttribute("hidden", "");
+    setFullscreen(false);
+    if (frame) {
+      frame.onload = null;
+      frame.src = "about:blank";
+    }
+    document.body.style.overflow = "";
+    activeDeck = null;
+  }
+
+  async function deleteActiveDeck() {
+    const d = activeDeck;
+    if (!d) return;
+    if (!confirm(`Delete “${d.title}”? This removes the deck and its file.`)) return;
+    const token = jwt();
+    const res = await fetch(
+      `/api/decks/mine/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
+      { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (res.ok || res.status === 404) {
+      const detail = { topic: d.topic, slug: d.slug };
+      closeModal();
+      document.dispatchEvent(new CustomEvent("vibedeck:deck-deleted", { detail }));
+    }
+  }
+
+  function init() {
+    $("[data-modal-close]")?.addEventListener("click", closeModal);
+    $("[data-modal-delete]")?.addEventListener("click", deleteActiveDeck);
+    $("[data-modal-expand]")?.addEventListener("click", toggleFullscreen);
+    $("[data-modal]")?.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      const modal = $<HTMLElement>("[data-modal]");
+      if (!modal || modal.hasAttribute("hidden")) return;
+      if (e.key === "Escape") {
+        closeModal();
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      // The reader listens for arrows on its own (iframe) document; forward
+      // them in when focus is on this page so prev/next still work.
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const doc = $<HTMLIFrameElement>("[data-modal-frame]")?.contentDocument;
+        if (doc) {
+          e.preventDefault();
+          doc.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, bubbles: true }));
+        }
+      }
+    });
+
+    (window as any).Vibedeck = { buildCard, openDeck, ownedReady, isOwned };
+    document.dispatchEvent(new Event("vibedeck:ready"));
+  }
+
+  init();
+</script>
+
+<style is:global>
+  /* Shared deck grid + card (cards are built in JS → must be global). */
+  .deckgrid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .deckcard {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+  }
+  .deckcard__thumb {
+    flex: none;
+    width: 240px;
+    height: 150px;
+    padding: 0;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    overflow: hidden;
+    background: var(--vd-bg);
+    cursor: pointer;
+    position: relative;
+  }
+  .deckcard__thumb:hover {
+    border-color: var(--vd-accent);
+  }
+  /* Render the reader large and scale down so the first slide stays crisp.
+     960×600 × 0.25 = 240×150 (the box above). */
+  .deckcard__thumb iframe {
+    width: 960px;
+    height: 600px;
+    border: 0;
+    transform: scale(0.25);
+    transform-origin: top left;
+    pointer-events: none;
+  }
+  .deckcard__info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .deckcard__title {
+    align-self: flex-start;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    font-family: var(--vd-font-heading);
+    font-size: 1.25rem;
+    line-height: 1.1;
+    color: var(--vd-heading);
+    cursor: pointer;
+  }
+  .deckcard__title:hover {
+    color: var(--vd-accent);
+  }
+  .deckcard__dates {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--vd-text);
+  }
+  .deckcard__meta {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+  }
+  @media (max-width: 32rem) {
+    .deckcard {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  /* ── Deck modal ── */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .modal[hidden] {
+    display: none;
+  }
+  .modal__panel {
+    display: flex;
+    flex-direction: column;
+    width: min(92vw, 64rem);
+    height: min(86vh, 56rem);
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    overflow: hidden;
+  }
+  /* Full-screen: the panel fills the viewport. × and Escape still close. */
+  .modal--full {
+    padding: 0;
+  }
+  .modal--full .modal__panel {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+  }
+  .modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--vd-card-border);
+  }
+  .modal__title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--vd-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .modal__controls {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .modal__icon {
+    background: none;
+    border: 0;
+    color: var(--vd-text);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.1rem 0.25rem;
+  }
+  .modal__icon:hover {
+    color: var(--vd-accent);
+  }
+  .modal__frame {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: var(--vd-bg);
+  }
+  .modal__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--vd-card-border);
+  }
+  .modal__foot[hidden] {
+    display: none;
+  }
+  .modal__edit {
+    padding: 0.55rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .modal__edit:hover {
+    filter: brightness(1.08);
+  }
+  .modal__del {
+    padding: 0.55rem 1.1rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: #f87171;
+    font: inherit;
+    cursor: pointer;
+  }
+  .modal__del:hover {
+    border-color: #f87171;
+  }
+</style>

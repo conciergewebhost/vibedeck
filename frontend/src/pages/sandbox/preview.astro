@@ -42,13 +42,7 @@ if (Astro.request.method === "POST") {
 {
   deck ? (
     <BaseLayout title="Sandbox preview" theme={theme} showNav={false}>
-      <Reader
-        deck={deck}
-        topicSlug="sandbox"
-        backHref="/sandbox"
-        backLabel="‹ Back to editor"
-        backTarget="_top"
-      />
+      <Reader deck={deck} topicSlug="sandbox" />
     </BaseLayout>
   ) : (
     <BaseLayout title="Sandbox preview" showNav={false}>

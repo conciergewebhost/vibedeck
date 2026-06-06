@@ -1,70 +1,107 @@
 ---
 /**
- * Decks library ( /decks ) — all topics, grouped. (Previously the site root;
- * the root is now the landing page.)
+ * Decks library ( /decks ) — every public deck as a thumbnail card, grouped
+ * under its topic. Cards open the shared expandable modal (DeckModal); Edit
+ * and Delete appear there only for decks the viewer owns.
+ *
+ * The section structure is server-rendered; the cards themselves are built on
+ * the client by the shared component (so the card/modal behaviour is shared
+ * verbatim with the portal). Deck data is embedded as a JSON island.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { fetchTopics } from "../lib/api";
+import DeckModal from "../components/DeckModal.astro";
+import { fetchPublicDecks } from "../lib/api";
 
-const topics = (await fetchTopics()) ?? [];
+const decks = (await fetchPublicDecks()) ?? [];
+
+// Group decks by topic, preserving the API's order (topic name, then title).
+type Group = { slug: string; name: string; decks: typeof decks };
+const groups: Group[] = [];
+const byTopic = new Map<string, number>();
+for (const d of decks) {
+  if (!byTopic.has(d.topic)) {
+    byTopic.set(d.topic, groups.length);
+    groups.push({ slug: d.topic, name: d.topic_name, decks: [] });
+  }
+  groups[byTopic.get(d.topic)!].decks.push(d);
+}
+
+// `<` escaped so a deck title containing "</script>" can't break out.
+const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
 ---
 
 <BaseLayout title="Decks — Vibedeck">
-  <main class="home">
-    <a class="home__back" href="/">‹ Home</a>
-    <header class="home__head">
-      <h1 class="home__title">Decks</h1>
-      <p class="home__tag">Browse the library, grouped by topic.</p>
+  <main class="decks">
+    <header class="decks__head">
+      <h1 class="decks__title">Decks</h1>
+      <p class="decks__tag">Browse the library, grouped by topic.</p>
     </header>
 
     {
-      topics.length === 0 ? (
-        <p class="home__empty">No topics yet.</p>
+      groups.length === 0 ? (
+        <p class="decks__empty">No decks yet.</p>
       ) : (
-        <ul class="topic-list">
-          {topics.map((t) => (
-            <li class="topic-card">
-              <a href={`/${t.slug}`}>
-                <h2>{t.display_name}</h2>
-                <p class="topic-card__count">
-                  {t.deck_count} deck{t.deck_count === 1 ? "" : "s"}
-                </p>
-                {t.top_keywords.length > 0 && (
-                  <ul class="kw">
-                    {t.top_keywords.map((k) => (
-                      <li>{k}</li>
-                    ))}
-                  </ul>
-                )}
-              </a>
-            </li>
-          ))}
-        </ul>
+        groups.map((g) => (
+          <section class="topic-group">
+            <h2 class="topic-group__title">{g.name}</h2>
+            <ul class="deckgrid" data-topic-grid={g.slug} />
+          </section>
+        ))
       )
     }
   </main>
+
+  <script type="application/json" id="decks-data" set:html={decksJson}></script>
+  <DeckModal />
 </BaseLayout>
 
+<script>
+  function whenReady(cb: () => void) {
+    if ((window as any).Vibedeck) cb();
+    else document.addEventListener("vibedeck:ready", cb, { once: true });
+  }
+
+  type Deck = {
+    topic: string;
+    slug: string;
+    title: string;
+    url: string;
+    card_count: number;
+    created_at: string | null;
+    updated_at: string | null;
+  };
+  type Group = { slug: string; name: string; decks: Deck[] };
+
+  const dataEl = document.getElementById("decks-data");
+  const groups: Group[] = dataEl ? JSON.parse(dataEl.textContent || "[]") : [];
+
+  whenReady(() => {
+    const V = (window as any).Vibedeck;
+    for (const g of groups) {
+      const grid = document.querySelector<HTMLUListElement>(`[data-topic-grid="${g.slug}"]`);
+      if (!grid) continue;
+      for (const d of g.decks) grid.append(V.buildCard(d));
+    }
+  });
+
+  // When the owner deletes a deck from the modal, drop its card (and the topic
+  // section if it's now empty).
+  document.addEventListener("vibedeck:deck-deleted", (e) => {
+    const { topic, slug } = (e as CustomEvent).detail;
+    const li = document.querySelector(`[data-deck-key="${topic}/${slug}"]`);
+    const grid = li?.closest<HTMLElement>("[data-topic-grid]");
+    li?.remove();
+    if (grid && grid.children.length === 0) grid.closest(".topic-group")?.remove();
+  });
+</script>
+
 <style>
-  .home {
-    max-width: 48rem;
+  .decks {
+    max-width: 52rem;
     margin: 0 auto;
     padding: clamp(1.5rem, 6vw, 3.5rem) 1.5rem;
   }
-  .home__back {
-    color: var(--vd-text-muted);
-    font-family: var(--vd-font-heading);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-size: 0.85rem;
-    text-decoration: none;
-    display: inline-block;
-    margin-bottom: 1.5rem;
-  }
-  .home__back:hover {
-    color: var(--vd-accent);
-  }
-  .home__title {
+  .decks__title {
     font-size: clamp(2.5rem, 10vw, 4.5rem);
     margin: 0 0 0.5rem;
     letter-spacing: -0.03em;
@@ -73,51 +110,24 @@ const topics = (await fetchTopics()) ?? [];
     background-clip: text;
     color: transparent;
   }
-  .home__tag {
+  .decks__tag {
     color: var(--vd-text-muted);
     margin: 0 0 2.5rem;
   }
-  .topic-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  }
-  .topic-card a {
-    display: block;
-    padding: 1.25rem;
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    background: var(--vd-card-bg);
-    color: inherit;
-    text-decoration: none;
-  }
-  .topic-card a:hover {
-    border-color: var(--vd-accent);
-  }
-  .topic-card h2 {
-    margin: 0 0 0.25rem;
-  }
-  .topic-card__count {
+  .decks__empty {
     color: var(--vd-text-muted);
-    margin: 0 0 0.75rem;
-    font-size: 0.9rem;
   }
-  .kw {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+  .topic-group {
+    margin-bottom: clamp(2rem, 6vw, 3rem);
   }
-  .kw li {
-    font-size: 0.75rem;
-    color: var(--vd-text-muted);
-    border: 1px solid var(--vd-card-border);
-    border-radius: 999px;
-    padding: 0.15rem 0.6rem;
+  .topic-group__title {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: clamp(1.3rem, 4vw, 1.8rem);
+    color: var(--vd-heading);
+    margin: 0 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--vd-card-border);
   }
 </style>
