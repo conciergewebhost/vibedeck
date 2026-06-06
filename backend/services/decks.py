@@ -72,6 +72,8 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
             card_count=d.card_count,
             filename=d.filename,
             url=f"/{d.topic.slug}/{d.slug}",
+            created_at=d.created_at,
+            updated_at=d.updated_at,
         )
         for d in decks
     ]
@@ -113,6 +115,8 @@ def list_user_decks(db: Session, owner_id: int) -> list[AdminDeckItem]:
             card_count=d.card_count,
             filename=d.filename,
             url=f"/{d.topic.slug}/{d.slug}",
+            created_at=d.created_at,
+            updated_at=d.updated_at,
         )
         for d in decks
     ]

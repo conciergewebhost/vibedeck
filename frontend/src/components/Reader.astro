@@ -20,6 +20,9 @@ interface Props {
   backHref?: string;
   backLabel?: string;
   backTarget?: string;
+  // Embed mode (e.g. the portal thumbnail): show only the first card, no nav
+  // chrome, no index modal, and no client interactions.
+  embed?: boolean;
 }
 
 const {
@@ -28,11 +31,12 @@ const {
   backHref = `/${topicSlug}`,
   backLabel = "‹ Back to deck list",
   backTarget,
+  embed = false,
 } = Astro.props;
 const total = deck.cards.length;
 ---
 
-<section class="reader" aria-roledescription="card deck">
+<section class="reader" aria-roledescription="card deck" data-embed={embed ? "" : undefined}>
   <div class="reader__stage">
     {
       deck.cards.map((card, i) => (
@@ -47,41 +51,49 @@ const total = deck.cards.length;
     }
   </div>
 
-  <nav class="reader__nav" aria-label="Card navigation">
-    <button class="reader__btn" data-nav="prev" aria-label="Previous card">‹</button>
-    <span class="reader__progress">
-      <span data-current>1</span> / {total}
-    </span>
-    <button class="reader__btn" data-nav="next" aria-label="Next card">›</button>
-    <button class="reader__btn reader__btn--index" data-nav="index" aria-label="Open index">☰</button>
-  </nav>
+  {
+    !embed && (
+      <nav class="reader__nav" aria-label="Card navigation">
+        <button class="reader__btn" data-nav="prev" aria-label="Previous card">‹</button>
+        <span class="reader__progress">
+          <span data-current>1</span> / {total}
+        </span>
+        <button class="reader__btn" data-nav="next" aria-label="Next card">›</button>
+        <button class="reader__btn reader__btn--index" data-nav="index" aria-label="Open index">☰</button>
+      </nav>
+    )
+  }
 
-  <div class="reader__modal" data-modal hidden>
-    <div class="reader__modal-panel" role="dialog" aria-label="Card index">
-      <header class="reader__modal-head">
-        <a class="reader__back" href={backHref} target={backTarget}>{backLabel}</a>
-        <button class="reader__btn" data-nav="close" aria-label="Close index">✕</button>
-      </header>
-      <ol class="reader__index">
-        {
-          deck.cards.map((card, i) => (
-            <li>
-              <button data-jump={i}>
-                <span class="reader__index-num">{i + 1}</span>
-                <span class="reader__index-label">{cardLabel(card.body, card.type)}</span>
-              </button>
-            </li>
-          ))
-        }
-      </ol>
-    </div>
-  </div>
+  {
+    !embed && (
+      <div class="reader__modal" data-modal hidden>
+        <div class="reader__modal-panel" role="dialog" aria-label="Card index">
+          <header class="reader__modal-head">
+            <a class="reader__back" href={backHref} target={backTarget}>{backLabel}</a>
+            <button class="reader__btn" data-nav="close" aria-label="Close index">✕</button>
+          </header>
+          <ol class="reader__index">
+            {deck.cards.map((card, i) => (
+              <li>
+                <button data-jump={i}>
+                  <span class="reader__index-num">{i + 1}</span>
+                  <span class="reader__index-label">{cardLabel(card.body, card.type)}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    )
+  }
 </section>
 
 <script>
   function initReader() {
     const reader = document.querySelector<HTMLElement>(".reader");
     if (!reader) return;
+    // Embed mode (thumbnail): static first card, no interactions.
+    if (reader.hasAttribute("data-embed")) return;
     const cards = Array.from(
       reader.querySelectorAll<HTMLElement>(".reader__card"),
     );

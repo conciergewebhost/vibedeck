@@ -4,6 +4,8 @@ A DeckDetail carries the deck metadata plus the cards parsed from the
 canonical file on read (card bodies are never stored in the DB).
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -87,3 +89,5 @@ class AdminDeckItem(BaseModel):
     card_count: int
     filename: str
     url: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

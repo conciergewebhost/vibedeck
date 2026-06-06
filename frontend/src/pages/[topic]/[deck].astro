@@ -14,8 +14,11 @@ const data = await fetchDeck(topic!, deck!);
 if (!data) {
   return Astro.rewrite("/404");
 }
+
+// ?embed=1 → a chrome-less first-slide view, used as the portal thumbnail.
+const embed = Astro.url.searchParams.has("embed");
 ---
 
 <BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme} showNav={false}>
-  <Reader deck={data} topicSlug={topic!} />
+  <Reader deck={data} topicSlug={topic!} embed={embed} />
 </BaseLayout>
