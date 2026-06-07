@@ -109,6 +109,7 @@ import DeckModal from "../components/DeckModal.astro";
     card_count: number;
     filename: string;
     url: string;
+    visibility?: string;
     created_at: string | null;
     updated_at: string | null;
     owner_email: string | null;
@@ -189,6 +190,7 @@ import DeckModal from "../components/DeckModal.astro";
       title: d.title,
       url: d.url,
       card_count: d.card_count,
+      visibility: d.visibility,
       created_at: d.created_at,
       updated_at: d.updated_at,
     };

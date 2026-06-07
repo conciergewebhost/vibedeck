@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Deck, Keyword, Topic
-from services.parser import parse_deck
+from services.parser import VALID_VISIBILITIES, parse_deck
 
 
 def slugify(value: str) -> str:
@@ -89,6 +89,8 @@ def index_deck_file(db: Session, *, filename: str, owner_id: int) -> Deck:
     deck.author = str(meta["author"])
     deck.description = meta.get("description")
     deck.theme = str(meta["theme"])
+    vis = str(meta.get("visibility", "public"))
+    deck.visibility = vis if vis in VALID_VISIBILITIES else "public"
     deck.card_count = len(parsed.cards)
     deck.topic = topic
     deck.keywords = _sync_keywords(db, meta.get("keywords", []))

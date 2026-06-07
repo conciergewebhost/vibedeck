@@ -51,6 +51,7 @@ export interface DeckDetail {
   description: string | null;
   topic: string;
   theme: string;
+  visibility: string; // "public" | "unlisted" | "private"
   keywords: string[];
   cards: Card[];
 }
@@ -97,6 +98,22 @@ export const fetchDeck = (topic: string, deck: string) =>
   getJson<DeckDetail>(
     `/api/decks/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}`,
   );
+
+/**
+ * CSS of a deck's custom theme, or null if it uses a built-in theme (404).
+ * Public — lets the reader inline a custom theme at SSR so every viewer sees
+ * it, not just the signed-in owner.
+ */
+export async function fetchDeckThemeCss(
+  topic: string,
+  deck: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `${API_BASE}/api/decks/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}/theme.css`,
+  );
+  if (!res.ok) return null;
+  return res.text();
+}
 
 /**
  * Parse raw deck markdown via the public sandbox endpoint (no persistence).

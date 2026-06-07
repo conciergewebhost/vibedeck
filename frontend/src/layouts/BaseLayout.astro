@@ -9,6 +9,7 @@
  */
 import "../styles/global.css";
 import NavBar from "../components/NavBar.astro";
+import { googleFontsHref } from "../lib/fonts";
 
 // Theme stylesheets live in src/styles/themes/ (CLAUDE.md convention) and
 // are selected at runtime by the deck/topic `theme` field. We resolve each
@@ -106,6 +107,12 @@ const canonical = Astro.site
         }
       })();
     </script>
+    {/* Curated web fonts — loaded app-side (not via theme @import, which is
+        blocked) so any custom theme built with the theme builder can use them.
+        See src/lib/fonts.ts. */}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href={googleFontsHref()} />
     {/* Theme stylesheet — one file per theme, sets the --vd-* tokens.
         href is the bundled, hashed URL resolved above (not a raw path). */}
     <link rel="stylesheet" href={themeHref} />

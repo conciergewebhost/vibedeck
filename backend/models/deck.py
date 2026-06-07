@@ -54,6 +54,14 @@ class Deck(Base):
     description: Mapped[str | None] = mapped_column(String(500), default=None)
     theme: Mapped[str] = mapped_column(String(120))
 
+    # Visibility, from the file's frontmatter (defaults to public):
+    #   public   — listed in the library + readable by anyone
+    #   unlisted — readable by direct link, but kept out of all listings
+    #   private  — owner-only (the public reader 404s it)
+    visibility: Mapped[str] = mapped_column(
+        String(12), default="public", server_default="public", index=True
+    )
+
     # Pointer to the canonical file under UPLOAD_DIR (relative filename).
     filename: Mapped[str] = mapped_column(String(300), unique=True)
 

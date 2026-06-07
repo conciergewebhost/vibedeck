@@ -61,6 +61,7 @@ class DeckDetail(BaseModel):
     description: str | None = None
     topic: str  # topic slug
     theme: str
+    visibility: str = "public"
     keywords: list[str]
     cards: list[Card]
 
@@ -104,6 +105,7 @@ class AdminDeckItem(BaseModel):
     card_count: int
     filename: str
     url: str
+    visibility: str = "public"
     created_at: datetime | None = None
     updated_at: datetime | None = None
     owner_email: str | None = None  # populated for the admin all-decks list

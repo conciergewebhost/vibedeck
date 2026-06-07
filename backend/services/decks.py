@@ -16,6 +16,7 @@ from models import Deck, Keyword, Topic, deck_keywords
 from schemas.deck import AdminDeckItem, Card, DeckDetail, PublicDeckItem
 from services.indexing import deck_filename, index_deck_file
 from services.parser import parse_deck
+from services.themes import get_user_theme_css
 
 
 class DeckConflict(Exception):
@@ -80,6 +81,10 @@ def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
     if deck is None:
         return None
 
+    # Private decks are owner-only; the public reader treats them as missing.
+    if deck.visibility == "private":
+        return None
+
     path = Path(settings.UPLOAD_DIR) / deck.filename
     parsed = parse_deck(path.read_text(encoding="utf-8"))
     cards = [Card(type=c.type, meta=c.meta, body=c.body) for c in parsed.cards]
@@ -91,9 +96,27 @@ def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
         description=deck.description,
         topic=topic_slug,
         theme=deck.theme,
+        visibility=deck.visibility,
         keywords=[k.value for k in deck.keywords],
         cards=cards,
     )
+
+
+def get_deck_theme_css(db: Session, topic_slug: str, deck_slug: str) -> str | None:
+    """CSS of the custom theme a deck uses, or None.
+
+    Resolves the deck → its owner + `theme` slug → that owner's theme CSS, so a
+    deck's custom theme renders for ALL of its readers (not just the signed-in
+    owner). A built-in theme name (or no matching theme row) yields None. The
+    CSS was safety-validated when the theme was created; only a theme actually
+    attached to a deck becomes visible this way.
+    """
+    deck = _resolve_deck(db, topic_slug, deck_slug)
+    if deck is None or deck.owner_id is None:
+        return None
+    if deck.visibility == "private":  # not publicly viewable → no public CSS
+        return None
+    return get_user_theme_css(db, deck.owner_id, deck.theme)
 
 
 def list_all_decks(db: Session) -> list[AdminDeckItem]:
@@ -113,6 +136,7 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
             card_count=d.card_count,
             filename=d.filename,
             url=f"/{d.topic.slug}/{d.slug}",
+            visibility=d.visibility,
             created_at=d.created_at,
             updated_at=d.updated_at,
             owner_email=d.owner.email if d.owner else None,
@@ -122,14 +146,15 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
 
 
 def list_public_decks(db: Session) -> list[PublicDeckItem]:
-    """All decks for the public library grid, with their topic display name.
+    """Public decks for the library grid, with their topic display name.
 
-    (No public/private flag exists yet, so this is every indexed deck; it will
-    filter to public ones once that toggle lands.)
+    Filtered to visibility == 'public'; unlisted and private decks are kept
+    out of all listings.
     """
     decks = db.scalars(
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
+        .where(Deck.visibility == "public")
         .order_by(Topic.display_name, Deck.title)
     ).all()
     return [
@@ -184,6 +209,7 @@ def list_user_decks(db: Session, owner_id: int) -> list[AdminDeckItem]:
             card_count=d.card_count,
             filename=d.filename,
             url=f"/{d.topic.slug}/{d.slug}",
+            visibility=d.visibility,
             created_at=d.created_at,
             updated_at=d.updated_at,
         )

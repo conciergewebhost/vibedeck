@@ -1,0 +1,541 @@
+---
+/**
+ * /account/theme — form-based theme builder (create from scratch or seed from
+ * an existing theme). The user sets the --vd-* design tokens via form controls;
+ * the page generates a small `:root { … }` CSS string and saves it through the
+ * existing POST /api/themes (which validates it). Because the form only emits
+ * constrained tokens, the generated CSS is safe by construction — this is the
+ * approved replacement for the paused raw-CSS upload.
+ *
+ * Fonts come from a curated, app-preloaded set (src/lib/fonts.ts): @import is
+ * blocked in theme CSS, so a theme can only use fonts the app already loads.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Build a theme — Vibedeck">
+  <main class="tb">
+    <header class="tb__head">
+      <h1 class="tb__title">Build a theme</h1>
+      <div class="tb__actions">
+        <a class="tb__link" href="/account">‹ Back to my decks</a>
+        <button class="tb__btn" type="button" data-save>Save theme</button>
+      </div>
+    </header>
+
+    <p class="tb__msg" data-msg role="status" hidden></p>
+
+    <div class="tb__grid">
+      <section class="tb__form">
+        <label class="tb__field">
+          <span>Theme name</span>
+          <input type="text" data-name placeholder="My theme" />
+        </label>
+
+        <label class="tb__field">
+          <span>Start from</span>
+          <select data-seed></select>
+        </label>
+        <p class="tb__note" data-seed-note hidden></p>
+
+        <h2 class="tb__sub">Colours</h2>
+        <div class="tb__colors" data-colors></div>
+
+        <h2 class="tb__sub">Type</h2>
+        <label class="tb__field">
+          <span>Body font</span>
+          <select data-font="body"></select>
+        </label>
+        <label class="tb__field">
+          <span>Heading font</span>
+          <select data-font="heading"></select>
+        </label>
+
+        <h2 class="tb__sub">Layout</h2>
+        <div class="tb__sizes" data-sizes></div>
+      </section>
+
+      <section class="tb__previewpane">
+        <div class="tb__preview" data-preview>
+          <div class="tbc tbc--title">
+            <h1>Aa — the quick brown fox</h1>
+            <h3>A subheading, for context</h3>
+          </div>
+          <div class="tbc">
+            <h2>A concept card</h2>
+            <p>Body text in the chosen body font, on the card surface, with a
+              <a href="#" data-noclick>link in the accent colour</a> and
+              <span class="tbc__muted">muted secondary text</span>.</p>
+          </div>
+          <blockquote class="tbc tbc--quote">
+            <p>A pull quote, ruled in the accent.</p>
+          </blockquote>
+          <button class="tbc__cta" type="button" data-noclick>Accent button</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<script>
+  import { CURATED_FONTS } from "../../lib/fonts";
+
+  const SESSION_KEY = "vd_session";
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s);
+  const jwt = () => localStorage.getItem(SESSION_KEY);
+  const authHeaders = (extra: Record<string, string> = {}) => ({
+    Authorization: `Bearer ${jwt()}`,
+    ...extra,
+  });
+  function handle401() {
+    localStorage.removeItem(SESSION_KEY);
+    location.replace("/login");
+  }
+  function setMsg(text: string, kind: "ok" | "err") {
+    const m = $<HTMLElement>("[data-msg]");
+    if (!m) return;
+    m.textContent = text;
+    m.dataset.kind = kind;
+    m.hidden = false;
+  }
+
+  // ── Token model (maps 1:1 to the --vd-* contract) ──────────────────────
+  const COLORS: { key: string; label: string }[] = [
+    { key: "bg", label: "Background" },
+    { key: "card-bg", label: "Card surface" },
+    { key: "card-border", label: "Card border" },
+    { key: "text", label: "Text" },
+    { key: "text-muted", label: "Muted text" },
+    { key: "heading", label: "Headings" },
+    { key: "accent", label: "Accent" },
+    { key: "accent-2", label: "Accent 2" },
+    { key: "nav-bg", label: "Nav / chrome" },
+  ];
+  const SIZES: { key: string; label: string }[] = [
+    { key: "card-max-width", label: "Card max width" },
+    { key: "card-padding", label: "Card padding" },
+    { key: "radius", label: "Corner radius" },
+    { key: "font-scale", label: "Type scale" },
+  ];
+
+  // Defaults mirror styles/themes/default.css (the dark baseline).
+  const DEFAULTS: Record<string, string> = {
+    "bg": "#0f172a",
+    "card-bg": "#1e293b",
+    "card-border": "#334155",
+    "text": "#e2e8f0",
+    "text-muted": "#94a3b8",
+    "heading": "#f8fafc",
+    "accent": "#818cf8",
+    "accent-2": "#c084fc",
+    "nav-bg": "#0f172a",
+    "font-body": CURATED_FONTS[0].stack,
+    "font-heading": CURATED_FONTS[0].stack,
+    "card-max-width": "40rem",
+    "card-padding": "clamp(1.5rem, 5vw, 3rem)",
+    "radius": "1rem",
+    "font-scale": "1",
+  };
+
+  const values: Record<string, string> = { ...DEFAULTS };
+
+  // ── Generate the theme CSS ─────────────────────────────────────────────
+  function buildCss(): string {
+    const line = (k: string) => `  --vd-${k}: ${values[k]};`;
+    const order = [
+      "bg", "card-bg", "card-border", "text", "text-muted", "heading",
+      "accent", "accent-2", "font-body", "font-heading", "font-scale",
+      "card-max-width", "card-padding", "radius", "nav-bg",
+    ];
+    return ":root {\n" + order.map(line).join("\n") + "\n  --vd-progress: var(--vd-text-muted);\n}\n";
+  }
+
+  // ── Live preview (set the vars on the preview container) ────────────────
+  function applyPreview() {
+    const box = $<HTMLElement>("[data-preview]");
+    if (!box) return;
+    for (const k of Object.keys(values)) box.style.setProperty(`--vd-${k}`, values[k]);
+  }
+
+  // ── Build the form controls ────────────────────────────────────────────
+  function renderColors() {
+    const host = $<HTMLElement>("[data-colors]");
+    if (!host) return;
+    host.replaceChildren();
+    for (const c of COLORS) {
+      const label = document.createElement("label");
+      label.className = "tb__color";
+      const span = document.createElement("span");
+      span.textContent = c.label;
+      const input = document.createElement("input");
+      input.type = "color";
+      input.value = toHex(values[c.key]);
+      input.addEventListener("input", () => {
+        values[c.key] = input.value;
+        applyPreview();
+      });
+      label.append(input, span);
+      host.append(label);
+    }
+  }
+
+  function renderSizes() {
+    const host = $<HTMLElement>("[data-sizes]");
+    if (!host) return;
+    host.replaceChildren();
+    for (const s of SIZES) {
+      const label = document.createElement("label");
+      label.className = "tb__field";
+      const span = document.createElement("span");
+      span.textContent = s.label;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = values[s.key];
+      input.addEventListener("input", () => {
+        values[s.key] = input.value;
+        applyPreview();
+      });
+      label.append(span, input);
+      host.append(label);
+    }
+  }
+
+  function renderFontSelect(which: "body" | "heading") {
+    const sel = document.querySelector<HTMLSelectElement>(`[data-font="${which}"]`);
+    if (!sel) return;
+    const key = `font-${which}`;
+    sel.replaceChildren();
+    let matched = false;
+    for (const f of CURATED_FONTS) {
+      const opt = document.createElement("option");
+      opt.value = f.stack;
+      opt.textContent = f.label;
+      if (f.stack === values[key]) {
+        opt.selected = true;
+        matched = true;
+      }
+      sel.append(opt);
+    }
+    if (!matched) {
+      // Seeded from a theme using a non-curated font: keep it as an option.
+      const opt = document.createElement("option");
+      opt.value = values[key];
+      opt.textContent = "Current (custom)";
+      opt.selected = true;
+      sel.prepend(opt);
+    }
+    sel.onchange = () => {
+      values[key] = sel.value;
+      applyPreview();
+    };
+  }
+
+  // ── Colour helpers (the <input type=color> needs #rrggbb) ───────────────
+  function toHex(v: string): string {
+    const s = (v || "").trim();
+    if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+    if (/^#[0-9a-f]{3}$/i.test(s)) return "#" + s.slice(1).split("").map((c) => c + c).join("");
+    const m = s.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+    if (m) {
+      const h = (n: string) => Number(n).toString(16).padStart(2, "0");
+      return "#" + h(m[1]) + h(m[2]) + h(m[3]);
+    }
+    return "#000000";
+  }
+
+  // ── Seed-from-existing ─────────────────────────────────────────────────
+  async function populateSeed() {
+    const sel = $<HTMLSelectElement>("[data-seed]");
+    if (!sel) return;
+    const opts: { value: string; label: string }[] = [{ value: "default", label: "Default (dark)" }];
+    try {
+      const res = await fetch("/api/themes/mine", { headers: authHeaders() });
+      if (res.ok) {
+        for (const t of await res.json()) opts.push({ value: `theme:${t.slug}`, label: `${t.name} (yours)` });
+      }
+    } catch {
+      /* none */
+    }
+    sel.replaceChildren();
+    for (const o of opts) {
+      const opt = document.createElement("option");
+      opt.value = o.value;
+      opt.textContent = o.label;
+      sel.append(opt);
+    }
+    sel.addEventListener("change", () => seedFrom(sel.value));
+  }
+
+  async function seedFrom(choice: string) {
+    const note = $<HTMLElement>("[data-seed-note]");
+    if (choice === "default") {
+      Object.assign(values, DEFAULTS);
+    } else if (choice.startsWith("theme:")) {
+      const slug = choice.slice(6);
+      try {
+        const res = await fetch(`/api/themes/mine/${encodeURIComponent(slug)}.css`, {
+          headers: authHeaders(),
+        });
+        if (res.ok) extractTokens(await res.text());
+      } catch {
+        /* leave values as-is */
+      }
+    }
+    if (note) note.hidden = true;
+    refreshControls();
+  }
+
+  function extractTokens(css: string) {
+    for (const k of Object.keys(DEFAULTS)) {
+      const m = css.match(new RegExp(`--vd-${k}\\s*:\\s*([^;]+);`, "i"));
+      if (m) values[k] = m[1].trim();
+    }
+  }
+
+  function refreshControls() {
+    $<HTMLInputElement>("[data-name]"); // unaffected by seeding
+    renderColors();
+    renderSizes();
+    renderFontSelect("body");
+    renderFontSelect("heading");
+    applyPreview();
+  }
+
+  // ── Save ───────────────────────────────────────────────────────────────
+  async function save() {
+    const name = $<HTMLInputElement>("[data-name]")?.value.trim() ?? "";
+    if (!name) return setMsg("Give your theme a name.", "err");
+    const btn = $<HTMLButtonElement>("[data-save]");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/api/themes", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name, css: buildCss() }),
+      });
+      if (res.status === 401) return handle401();
+      if (res.ok) {
+        setMsg("Saved! Use it by picking it as a deck's theme.", "ok");
+        setTimeout(() => location.assign("/account"), 700);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) setMsg("You already have a theme with that name.", "err");
+      else setMsg(data.detail ?? `Could not save (${res.status}).`, "err");
+    } catch {
+      setMsg("Network error while saving.", "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function init() {
+    if (!jwt()) {
+      location.replace("/login");
+      return;
+    }
+    document.querySelectorAll("[data-noclick]").forEach((el) =>
+      el.addEventListener("click", (e) => e.preventDefault()),
+    );
+    $("[data-save]")?.addEventListener("click", save);
+    populateSeed();
+    refreshControls();
+  }
+
+  init();
+</script>
+
+<style>
+  .tb {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 2rem) 1.25rem 2.5rem;
+  }
+  .tb__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .tb__title {
+    margin: 0;
+  }
+  .tb__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .tb__link {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .tb__link:hover {
+    color: var(--vd-accent);
+  }
+  .tb__btn {
+    padding: 0.55rem 1.3rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tb__btn:hover {
+    filter: brightness(1.08);
+  }
+  .tb__btn:disabled {
+    opacity: 0.6;
+  }
+  .tb__msg {
+    margin: 0 0 1rem;
+    line-height: 1.5;
+  }
+  .tb__msg[data-kind="err"] {
+    color: #f87171;
+  }
+  .tb__msg[data-kind="ok"] {
+    color: var(--vd-accent);
+  }
+  .tb__grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: 1fr;
+  }
+  .tb__sub {
+    margin: 1.4rem 0 0.6rem;
+    font-size: 1rem;
+    color: var(--vd-text-muted);
+    border-top: 1px solid var(--vd-card-border);
+    padding-top: 1rem;
+  }
+  .tb__field {
+    display: block;
+    margin-bottom: 0.75rem;
+  }
+  .tb__field > span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--vd-text-muted);
+    margin-bottom: 0.3rem;
+  }
+  .tb__field input,
+  .tb__field select,
+  [data-seed] {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .tb__note {
+    margin: 0 0 0.75rem;
+    font-size: 0.82rem;
+    color: var(--vd-text-muted);
+  }
+  .tb__colors {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: 0.6rem;
+  }
+  .tb__color {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--vd-text);
+  }
+  .tb__color input[type="color"] {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: none;
+    cursor: pointer;
+  }
+  .tb__sizes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.6rem;
+  }
+
+  /* ── Live preview ── */
+  .tb__previewpane {
+    min-width: 0;
+  }
+  .tb__preview {
+    /* The --vd-* vars are set on this container by JS; descendants below read
+       them, so the swatch reflects the in-progress theme regardless of the
+       page's own theme. */
+    background: var(--vd-bg);
+    color: var(--vd-text);
+    font-family: var(--vd-font-body);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    padding: 1.25rem;
+    display: grid;
+    gap: 1rem;
+  }
+  .tbc {
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    padding: 1.1rem 1.25rem;
+  }
+  .tbc h1,
+  .tbc h2,
+  .tbc h3 {
+    font-family: var(--vd-font-heading);
+    color: var(--vd-heading);
+    margin: 0 0 0.4rem;
+  }
+  .tbc--title h1 {
+    background: linear-gradient(90deg, var(--vd-accent), var(--vd-accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tbc p {
+    margin: 0;
+    line-height: 1.6;
+  }
+  .tbc a {
+    color: var(--vd-accent);
+  }
+  .tbc__muted {
+    color: var(--vd-text-muted);
+  }
+  .tbc--quote {
+    border-left: 4px solid var(--vd-accent);
+    font-style: italic;
+  }
+  .tbc__cta {
+    justify-self: start;
+    padding: 0.55rem 1.2rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  @media (min-width: 60rem) {
+    .tb__grid {
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+    .tb__previewpane {
+      position: sticky;
+      top: 1rem;
+    }
+  }
+</style>

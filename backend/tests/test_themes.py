@@ -171,5 +171,90 @@ class TestThemeEndpoints(_AppTestCase):
         self.assertEqual(self.client.get("/api/themes/mine/mine.css", headers=b).status_code, 404)
 
 
+class TestDeckThemeCss(_AppTestCase):
+    """The public per-deck theme.css endpoint (reader-visibility SSR fix)."""
+
+    DECK_MD = (
+        "---\n"
+        "title: Styled\n"
+        "author: A\n"
+        "topic: t\n"
+        "keywords: [x]\n"
+        "theme: my-theme\n"
+        "---\n"
+        "---\n"
+        "type: title\n"
+        "---\n"
+        "# Hi\n"
+    )
+
+    def test_serves_a_decks_custom_theme_to_any_reader(self):
+        auth = self.make_user("a@e.com")
+        self.client.post(
+            "/api/themes", json={"name": "My Theme", "css": GOOD_CSS}, headers=auth
+        )
+        r = self.client.post(
+            "/api/decks/mine", json={"markdown": self.DECK_MD}, headers=auth
+        )
+        self.assertEqual(r.status_code, 201)
+        # No auth header — a public reader still gets the theme CSS.
+        r = self.client.get("/api/decks/t/styled/theme.css")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/css", r.headers["content-type"])
+        self.assertIn("--vd-bg", r.text)
+
+    def test_builtin_theme_deck_has_no_custom_css(self):
+        auth = self.make_user("a@e.com")
+        md = self.DECK_MD.replace("theme: my-theme", "theme: default")
+        self.client.post("/api/decks/mine", json={"markdown": md}, headers=auth)
+        self.assertEqual(self.client.get("/api/decks/t/styled/theme.css").status_code, 404)
+
+
+class TestDeckVisibility(_AppTestCase):
+    """Per-deck visibility: public (listed) / unlisted (link-only) / private."""
+
+    def _md(self, topic, title, visibility=None):
+        vis = f"visibility: {visibility}\n" if visibility else ""
+        return (
+            f"---\ntitle: {title}\nauthor: A\ntopic: {topic}\n"
+            f"keywords: [x]\ntheme: default\n{vis}---\n"
+            "---\ntype: title\n---\n# Hi\n"
+        )
+
+    def test_public_listed_unlisted_and_private_excluded(self):
+        auth = self.make_user("a@e.com")
+        for t, title, vis in [
+            ("pub", "Pub", "public"),
+            ("unl", "Unl", "unlisted"),
+            ("priv", "Priv", "private"),
+        ]:
+            r = self.client.post("/api/decks/mine", json={"markdown": self._md(t, title, vis)}, headers=auth)
+            self.assertEqual(r.status_code, 201, r.text)
+        listed = {d["slug"] for d in self.client.get("/api/decks/public").json()}
+        self.assertEqual(listed, {"pub"})  # only the public deck is listed
+
+    def test_unlisted_is_readable_by_url_but_private_404s(self):
+        auth = self.make_user("a@e.com")
+        self.client.post("/api/decks/mine", json={"markdown": self._md("unl", "Unl", "unlisted")}, headers=auth)
+        self.client.post("/api/decks/mine", json={"markdown": self._md("priv", "Priv", "private")}, headers=auth)
+        self.assertEqual(self.client.get("/api/decks/unl/unl").status_code, 200)
+        self.assertEqual(self.client.get("/api/decks/priv/priv").status_code, 404)
+
+    def test_reader_reports_visibility(self):
+        auth = self.make_user("a@e.com")
+        self.client.post("/api/decks/mine", json={"markdown": self._md("unl", "Unl", "unlisted")}, headers=auth)
+        self.assertEqual(self.client.get("/api/decks/unl/unl").json()["visibility"], "unlisted")
+
+    def test_invalid_visibility_rejected_on_save(self):
+        auth = self.make_user("a@e.com")
+        r = self.client.post("/api/decks/mine", json={"markdown": self._md("x", "X", "secret")}, headers=auth)
+        self.assertEqual(r.status_code, 400)
+
+    def test_default_visibility_is_public(self):
+        auth = self.make_user("a@e.com")
+        self.client.post("/api/decks/mine", json={"markdown": self._md("d", "D")}, headers=auth)
+        self.assertEqual(self.client.get("/api/decks/d/d").json()["visibility"], "public")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -85,7 +85,28 @@ const { embeddable = true } = Astro.props;
     card_count: number;
     created_at: string | null;
     updated_at: string | null;
+    visibility?: string; // "public" | "unlisted" | "private" (absent → public)
   };
+
+  // Private decks 404 at the public reader URL, so render them through the
+  // owner's session: fetch the markdown (owner-scoped) and run it through the
+  // same SSR preview path the editor uses. Returns rendered HTML, or null.
+  async function authedPreviewHtml(deck: Deck): Promise<string | null> {
+    const token = jwt();
+    if (!token) return null;
+    const src = await fetch(
+      `/api/decks/mine/${encodeURIComponent(deck.topic)}/${encodeURIComponent(deck.slug)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!src.ok) return null;
+    const { markdown } = await src.json();
+    const prev = await fetch("/sandbox/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown }),
+    });
+    return prev.ok ? prev.text() : null;
+  }
 
   let activeDeck: Deck | null = null;
   const ownedKeys = new Set<string>();
@@ -139,14 +160,24 @@ const { embeddable = true } = Astro.props;
     thumb.className = "deckcard__thumb";
     thumb.type = "button";
     thumb.setAttribute("aria-label", `Open ${deck.title}`);
-    const frame = document.createElement("iframe");
-    frame.src = `${deck.url}?embed=1`;
-    frame.loading = "lazy";
-    frame.tabIndex = -1;
-    frame.setAttribute("aria-hidden", "true");
-    frame.setAttribute("scrolling", "no");
-    frame.style.pointerEvents = "none"; // clicks fall through to the button
-    thumb.append(frame);
+    if (deck.visibility === "private") {
+      // The reader URL 404s a private deck for anyone unauthenticated (incl.
+      // this thumbnail iframe), so show a placeholder; the modal renders it
+      // through the owner's session on click.
+      const ph = document.createElement("span");
+      ph.className = "deckcard__private";
+      ph.textContent = "🔒 Private";
+      thumb.append(ph);
+    } else {
+      const frame = document.createElement("iframe");
+      frame.src = `${deck.url}?embed=1`;
+      frame.loading = "lazy";
+      frame.tabIndex = -1;
+      frame.setAttribute("aria-hidden", "true");
+      frame.setAttribute("scrolling", "no");
+      frame.style.pointerEvents = "none"; // clicks fall through to the button
+      thumb.append(frame);
+    }
     thumb.addEventListener("click", () => openDeck(deck));
 
     const info = document.createElement("div");
@@ -163,6 +194,12 @@ const { embeddable = true } = Astro.props;
     meta.className = "deckcard__meta";
     meta.textContent = `${deck.card_count} card${deck.card_count === 1 ? "" : "s"} · /${deck.topic}/${deck.slug}`;
     info.append(title, dates, meta);
+    if (deck.visibility && deck.visibility !== "public") {
+      const badge = document.createElement("span");
+      badge.className = `deckcard__badge deckcard__badge--${deck.visibility}`;
+      badge.textContent = deck.visibility;
+      info.append(badge);
+    }
 
     li.append(thumb, info);
     return li;
@@ -204,7 +241,9 @@ const { embeddable = true } = Astro.props;
       if (edit) {
         edit.hidden = !owned;
         if (owned)
-          edit.href = `/account/edit?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
+          // Form builder is the default editor; it links onward to the raw
+          // markdown editor. Only shown for decks the viewer owns.
+          edit.href = `/account/build?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
       }
       if (del) del.hidden = !owned;
     };
@@ -268,6 +307,9 @@ const { embeddable = true } = Astro.props;
     if (titleEl) titleEl.textContent = deck.title;
     hideEmbedPanel();
     applyOwnerActions(deck);
+    // Embedding a private deck wouldn't work (it 404s anonymously), so hide it.
+    const embedBtn = $<HTMLElement>("[data-modal-embed]");
+    if (embedBtn) embedBtn.style.display = deck.visibility === "private" ? "none" : "";
     // Bridge Escape out of the same-origin reader iframe (in case focus is
     // inside it) so it still closes this modal.
     frame.onload = () => {
@@ -283,7 +325,21 @@ const { embeddable = true } = Astro.props;
         /* cross-origin (shouldn't happen) */
       }
     };
-    frame.src = deck.url; // full interactive reader
+    if (deck.visibility === "private") {
+      // Render through the owner's session (the public URL would 404).
+      frame.removeAttribute("src");
+      frame.srcdoc =
+        "<p style='font-family:sans-serif;padding:2rem;color:#888'>Loading…</p>";
+      authedPreviewHtml(deck).then((html) => {
+        if (activeDeck === deck)
+          frame.srcdoc =
+            html ??
+            "<p style='font-family:sans-serif;padding:2rem;color:#f87171'>Couldn't load this private deck.</p>";
+      });
+    } else {
+      frame.removeAttribute("srcdoc");
+      frame.src = deck.url; // full interactive reader
+    }
     setFullscreen(false);
     modal.removeAttribute("hidden");
     document.body.style.overflow = "hidden";
@@ -403,11 +459,36 @@ const { embeddable = true } = Astro.props;
     transform-origin: top left;
     pointer-events: none;
   }
+  .deckcard__private {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--vd-text-muted);
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+  }
   .deckcard__info {
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
     min-width: 0;
+  }
+  .deckcard__badge {
+    align-self: flex-start;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--vd-card-border);
+    color: var(--vd-text-muted);
+  }
+  .deckcard__badge--private {
+    color: var(--vd-accent);
+    border-color: var(--vd-accent);
   }
   .deckcard__title {
     align-self: flex-start;

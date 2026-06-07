@@ -1,0 +1,863 @@
+---
+/**
+ * /account/build — form-based deck builder (create or edit).
+ *
+ *   /account/build                  → create a new deck
+ *   /account/build?topic=…&deck=…   → edit an existing owned deck
+ *
+ * A guided alternative to the raw markdown editor (/account/edit). The user
+ * fills per-card-type fields; the page assembles the exact deck markdown the
+ * backend parser expects, previews via the same /sandbox/preview path, and
+ * saves through the owner-scoped /api/decks/mine endpoints. No new backend.
+ *
+ * Round-trip: when editing, each parsed card is decomposed into its fields
+ * only if those fields reconstruct the body EXACTLY; otherwise that card drops
+ * to a raw "Edit as markdown" textarea, so nothing is ever lost.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const BUILTIN_THEMES = ["operazione-stile", "fascicolo", "default"];
+---
+
+<BaseLayout title="Build a deck — Vibedeck">
+  <main class="build">
+    <header class="build__head">
+      <h1 class="build__title" data-title>New deck</h1>
+      <div class="build__actions">
+        <a class="build__link" href="/account">‹ Back to my decks</a>
+        <a class="build__link" data-md-link href="/account/edit">Edit as markdown ›</a>
+        <button class="build__btn" type="button" data-save>Save</button>
+      </div>
+    </header>
+
+    <p class="build__msg" data-msg role="status" hidden></p>
+
+    <div class="build__grid">
+      <section class="build__pane">
+        <!-- Deck metadata -->
+        <fieldset class="build__meta">
+          <legend>Deck details</legend>
+          <label class="build__field">
+            <span>Title</span>
+            <input type="text" data-meta="title" placeholder="My deck" />
+          </label>
+          <label class="build__field">
+            <span>Author</span>
+            <input type="text" data-meta="author" placeholder="You" />
+          </label>
+          <label class="build__field">
+            <span>Topic</span>
+            <input type="text" data-meta="topic" placeholder="my-topic" />
+          </label>
+          <label class="build__field">
+            <span>Keywords <em>(comma-separated)</em></span>
+            <input type="text" data-meta="keywords" placeholder="intro, example" />
+          </label>
+          <label class="build__field">
+            <span>Theme</span>
+            <select data-meta="theme" data-theme-select></select>
+          </label>
+          <label class="build__field">
+            <span>Visibility</span>
+            <select data-meta="visibility">
+              <option value="public">Public — listed, anyone can read</option>
+              <option value="unlisted">Unlisted — link only, not listed</option>
+              <option value="private">Private — only you</option>
+            </select>
+          </label>
+          <label class="build__field">
+            <span>Description <em>(optional)</em></span>
+            <input type="text" data-meta="description" placeholder="One-line summary" />
+          </label>
+        </fieldset>
+
+        <!-- Cards -->
+        <div class="build__cards" data-cards></div>
+        <button class="build__add" type="button" data-add>+ Add card</button>
+      </section>
+
+      <section class="build__pane">
+        <iframe class="build__iframe" data-preview title="Deck preview"></iframe>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<script is:inline define:vars={{ BUILTIN_THEMES }}>
+  window.__VD_BUILTIN_THEMES = BUILTIN_THEMES;
+</script>
+
+<script>
+  const SESSION_KEY = "vd_session";
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s);
+
+  const jwt = () => localStorage.getItem(SESSION_KEY);
+  const authHeaders = (extra: Record<string, string> = {}) => ({
+    Authorization: `Bearer ${jwt()}`,
+    ...extra,
+  });
+  function handle401() {
+    localStorage.removeItem(SESSION_KEY);
+    location.replace("/login");
+  }
+  function setMsg(text: string, kind: "ok" | "err") {
+    const m = $<HTMLElement>("[data-msg]");
+    if (!m) return;
+    m.textContent = text;
+    m.dataset.kind = kind;
+    m.hidden = false;
+  }
+
+  // ── Card type definitions: fields + markdown (de)composition ───────────
+  // toBody assembles markdown from field values; fromBody extracts fields.
+  // A decomposition is only USED if toBody(fromBody(x)) === x (see loadCards),
+  // so an imperfect parser is always safe — the card just falls back to raw.
+  type Field = { key: string; label: string; kind: "text" | "textarea" | "url" | "list"; optional?: boolean; placeholder?: string };
+  type CardDef = {
+    label: string;
+    fields: Field[];
+    toBody: (d: Record<string, any>) => string;
+    fromBody: (body: string) => Record<string, any> | null;
+  };
+
+  const TYPES: Record<string, CardDef> = {
+    title: {
+      label: "Title",
+      fields: [
+        { key: "heading", label: "Heading", kind: "text", placeholder: "Deck title" },
+        { key: "subheading", label: "Subheading", kind: "text", optional: true },
+      ],
+      toBody: (d) => "# " + (d.heading || "") + (d.subheading ? "\n### " + d.subheading : ""),
+      fromBody: (body) => {
+        const h = body.match(/^#\s+(.+)$/m);
+        const sub = body.match(/^###\s+(.+)$/m);
+        if (!h) return null;
+        return { heading: h[1].trim(), subheading: sub ? sub[1].trim() : "" };
+      },
+    },
+    concept: {
+      label: "Concept",
+      fields: [
+        { key: "heading", label: "Heading", kind: "text", optional: true },
+        { key: "body", label: "Body", kind: "textarea", placeholder: "One focused idea, in markdown." },
+      ],
+      toBody: (d) => (d.heading ? "## " + d.heading + "\n\n" : "") + (d.body || ""),
+      fromBody: (body) => {
+        const m = body.match(/^##\s+(.+)\n+([\s\S]*)$/);
+        if (m) return { heading: m[1].trim(), body: m[2].trim() };
+        return { heading: "", body: body.trim() };
+      },
+    },
+    summary: {
+      label: "Summary",
+      fields: [
+        { key: "heading", label: "Heading", kind: "text", optional: true },
+        { key: "bullets", label: "Bullets", kind: "list", placeholder: "A point" },
+      ],
+      toBody: (d) => {
+        const items = (d.bullets || []).filter((b: string) => b.trim());
+        const list = items.map((b: string) => "- " + b).join("\n");
+        return (d.heading ? "## " + d.heading + "\n\n" : "") + list;
+      },
+      fromBody: (body) => {
+        const hm = body.match(/^##\s+(.+)$/m);
+        const bullets = [...body.matchAll(/^[-*]\s+(.+)$/gm)].map((m) => m[1].trim());
+        if (bullets.length === 0) return null;
+        return { heading: hm ? hm[1].trim() : "", bullets };
+      },
+    },
+    graphic: {
+      label: "Graphic",
+      fields: [
+        { key: "url", label: "Image URL", kind: "url", placeholder: "https://… or /path.png" },
+        { key: "alt", label: "Alt text", kind: "text", optional: true },
+        { key: "caption", label: "Caption", kind: "text", optional: true },
+      ],
+      toBody: (d) =>
+        "![" + (d.alt || "") + "](" + (d.url || "") + ")" + (d.caption ? "\n\n*" + d.caption + "*" : ""),
+      fromBody: (body) => {
+        const img = body.match(/^!\[(.*?)\]\((.*?)\)/m);
+        if (!img) return null;
+        const cap = body.match(/^\*(.+)\*$/m);
+        return { url: img[2].trim(), alt: img[1].trim(), caption: cap ? cap[1].trim() : "" };
+      },
+    },
+    quote: {
+      label: "Quote",
+      fields: [
+        { key: "quote", label: "Quote", kind: "textarea", placeholder: "The pull quote." },
+        { key: "attribution", label: "Attribution", kind: "text", optional: true },
+      ],
+      toBody: (d) => {
+        const q = (d.quote || "").split("\n").map((l: string) => "> " + l).join("\n");
+        return q + (d.attribution ? "\n\n— " + d.attribution : "");
+      },
+      fromBody: (body) => {
+        const qlines = [...body.matchAll(/^>\s?(.*)$/gm)].map((m) => m[1]);
+        if (qlines.length === 0) return null;
+        const attr = body.match(/^(?:—|-)\s*(.+)$/m);
+        return { quote: qlines.join("\n").trim(), attribution: attr ? attr[1].trim() : "" };
+      },
+    },
+  };
+  const TYPE_KEYS = Object.keys(TYPES);
+
+  // ── State ──────────────────────────────────────────────────────────────
+  type Card = { type: string; data: Record<string, any>; rawMode: boolean; raw: string };
+  const state = {
+    meta: { title: "", author: "", topic: "", keywords: "", theme: "operazione-stile", visibility: "public", description: "" },
+    cards: [] as Card[],
+  };
+
+  const params = new URLSearchParams(location.search);
+  const editTopic = params.get("topic");
+  const editDeck = params.get("deck");
+  const isEdit = Boolean(editTopic && editDeck);
+
+  function newCard(type = "concept"): Card {
+    return { type, data: {}, rawMode: false, raw: "" };
+  }
+
+  // ── Markdown assembly ──────────────────────────────────────────────────
+  function yamlValue(s: string): string {
+    // Quote values that would otherwise break flow YAML (colons, #, leading/
+    // trailing space, or empties); plain strings pass through unquoted.
+    if (s === "" || /[:#]/.test(s) || /^\s|\s$/.test(s)) return JSON.stringify(s);
+    return s;
+  }
+  function cardBody(card: Card): string {
+    return card.rawMode ? card.raw : TYPES[card.type].toBody(card.data);
+  }
+  function buildMarkdown(): string {
+    const kw = state.meta.keywords
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean);
+    const fm = [
+      "---",
+      `title: ${yamlValue(state.meta.title)}`,
+      `author: ${yamlValue(state.meta.author)}`,
+      `topic: ${yamlValue(state.meta.topic)}`,
+      `keywords: [${kw.join(", ")}]`,
+      `theme: ${yamlValue(state.meta.theme)}`,
+    ];
+    if (state.meta.visibility && state.meta.visibility !== "public")
+      fm.push(`visibility: ${state.meta.visibility}`);
+    if (state.meta.description) fm.push(`description: ${yamlValue(state.meta.description)}`);
+    fm.push("---");
+    const parts = [fm.join("\n")];
+    for (const card of state.cards) parts.push(`---\ntype: ${card.type}\n---\n${cardBody(card)}`);
+    return parts.join("\n");
+  }
+
+  // ── Live preview (same SSR path as the markdown editor) ────────────────
+  let timer: number | undefined;
+  function schedulePreview() {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(render, 400);
+  }
+  async function render() {
+    const iframe = $<HTMLIFrameElement>("[data-preview]");
+    if (!iframe) return;
+    try {
+      const res = await fetch("/sandbox/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: buildMarkdown() }),
+      });
+      iframe.srcdoc = await res.text();
+    } catch {
+      iframe.srcdoc =
+        "<p style='font-family:sans-serif;padding:2rem;color:#f87171'>Could not reach the preview service.</p>";
+    }
+  }
+
+  // ── Rendering the card editors ─────────────────────────────────────────
+  function fieldInput(card: Card, f: Field): HTMLElement {
+    const wrap = document.createElement("label");
+    wrap.className = "build__field";
+    const span = document.createElement("span");
+    span.innerHTML = f.label + (f.optional ? " <em>(optional)</em>" : "");
+    wrap.append(span);
+
+    if (f.kind === "list") {
+      // Repeatable text rows (e.g. summary bullets).
+      const list = document.createElement("div");
+      list.className = "build__list";
+      const values: string[] = Array.isArray(card.data[f.key]) ? card.data[f.key] : [];
+      if (values.length === 0) values.push("");
+      card.data[f.key] = values;
+      const redraw = () => {
+        list.replaceChildren();
+        values.forEach((val, i) => {
+          const row = document.createElement("div");
+          row.className = "build__list-row";
+          const inp = document.createElement("input");
+          inp.type = "text";
+          inp.value = val;
+          inp.placeholder = f.placeholder ?? "";
+          inp.addEventListener("input", () => {
+            values[i] = inp.value;
+            schedulePreview();
+          });
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "build__list-del";
+          del.textContent = "✕";
+          del.addEventListener("click", () => {
+            values.splice(i, 1);
+            if (values.length === 0) values.push("");
+            redraw();
+            schedulePreview();
+          });
+          row.append(inp, del);
+          list.append(row);
+        });
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "build__list-add";
+        add.textContent = "+ Add bullet";
+        add.addEventListener("click", () => {
+          values.push("");
+          redraw();
+        });
+        list.append(add);
+      };
+      redraw();
+      wrap.append(list);
+      return wrap;
+    }
+
+    const input =
+      f.kind === "textarea"
+        ? document.createElement("textarea")
+        : document.createElement("input");
+    if (input instanceof HTMLInputElement) input.type = f.kind === "url" ? "url" : "text";
+    input.value = card.data[f.key] ?? "";
+    if (f.placeholder) input.placeholder = f.placeholder;
+    input.addEventListener("input", () => {
+      card.data[f.key] = input.value;
+      schedulePreview();
+    });
+    wrap.append(input);
+    return wrap;
+  }
+
+  function renderCard(card: Card, index: number): HTMLElement {
+    const fs = document.createElement("fieldset");
+    fs.className = "build__card";
+
+    const head = document.createElement("div");
+    head.className = "build__card-head";
+
+    const typeSel = document.createElement("select");
+    typeSel.className = "build__card-type";
+    for (const t of TYPE_KEYS) {
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = TYPES[t].label;
+      if (t === card.type) opt.selected = true;
+      typeSel.append(opt);
+    }
+    typeSel.addEventListener("change", () => {
+      card.type = typeSel.value;
+      card.data = {};
+      card.rawMode = false;
+      renderCards();
+      schedulePreview();
+    });
+
+    const num = document.createElement("span");
+    num.className = "build__card-num";
+    num.textContent = `Card ${index + 1}`;
+
+    const tools = document.createElement("div");
+    tools.className = "build__card-tools";
+    const mkBtn = (label: string, title: string, fn: () => void) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "build__card-tool";
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    tools.append(
+      mkBtn("↑", "Move up", () => moveCard(index, -1)),
+      mkBtn("↓", "Move down", () => moveCard(index, 1)),
+      mkBtn("✕", "Remove card", () => removeCard(index)),
+    );
+
+    head.append(num, typeSel, tools);
+    fs.append(head);
+
+    if (card.rawMode) {
+      const ta = document.createElement("textarea");
+      ta.className = "build__raw";
+      ta.value = card.raw;
+      ta.spellcheck = false;
+      ta.addEventListener("input", () => {
+        card.raw = ta.value;
+        schedulePreview();
+      });
+      fs.append(ta);
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "build__raw-toggle";
+      back.textContent = "Use fields instead";
+      back.addEventListener("click", () => {
+        // Try to parse the raw body back into fields; only if it round-trips.
+        const parsed = TYPES[card.type].fromBody(card.raw);
+        if (parsed && TYPES[card.type].toBody(parsed).trim() === card.raw.trim()) {
+          card.data = parsed;
+          card.rawMode = false;
+          renderCards();
+          schedulePreview();
+        } else {
+          setMsg("This card's markdown doesn't map cleanly to fields — keep editing it as markdown.", "err");
+        }
+      });
+      fs.append(back);
+      return fs;
+    }
+
+    for (const f of TYPES[card.type].fields) fs.append(fieldInput(card, f));
+
+    const toRaw = document.createElement("button");
+    toRaw.type = "button";
+    toRaw.className = "build__raw-toggle";
+    toRaw.textContent = "Edit as markdown";
+    toRaw.addEventListener("click", () => {
+      card.raw = cardBody(card);
+      card.rawMode = true;
+      renderCards();
+    });
+    fs.append(toRaw);
+    return fs;
+  }
+
+  function renderCards() {
+    const host = $<HTMLElement>("[data-cards]");
+    if (!host) return;
+    host.replaceChildren();
+    state.cards.forEach((c, i) => host.append(renderCard(c, i)));
+  }
+
+  function moveCard(i: number, dir: number) {
+    const j = i + dir;
+    if (j < 0 || j >= state.cards.length) return;
+    [state.cards[i], state.cards[j]] = [state.cards[j], state.cards[i]];
+    renderCards();
+    schedulePreview();
+  }
+  function removeCard(i: number) {
+    state.cards.splice(i, 1);
+    renderCards();
+    schedulePreview();
+  }
+
+  // ── Meta inputs ────────────────────────────────────────────────────────
+  function bindMeta() {
+    document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-meta]").forEach((el) => {
+      const key = el.dataset.meta as keyof typeof state.meta;
+      el.value = state.meta[key];
+      el.addEventListener("input", () => {
+        state.meta[key] = el.value;
+        schedulePreview();
+      });
+      el.addEventListener("change", () => {
+        state.meta[key] = el.value;
+        schedulePreview();
+      });
+    });
+  }
+
+  async function populateThemes() {
+    const sel = $<HTMLSelectElement>("[data-theme-select]");
+    if (!sel) return;
+    const builtins: string[] = (window as any).__VD_BUILTIN_THEMES ?? [];
+    const opts: { value: string; label: string }[] = builtins.map((t) => ({ value: t, label: t }));
+    try {
+      const res = await fetch("/api/themes/mine", { headers: authHeaders() });
+      if (res.ok) {
+        const themes = await res.json();
+        for (const t of themes) opts.push({ value: t.slug, label: `${t.name} (yours)` });
+      }
+    } catch {
+      /* themes are optional */
+    }
+    // Ensure the deck's current theme is selectable even if not in the lists.
+    if (state.meta.theme && !opts.some((o) => o.value === state.meta.theme)) {
+      opts.unshift({ value: state.meta.theme, label: state.meta.theme });
+    }
+    sel.replaceChildren();
+    for (const o of opts) {
+      const opt = document.createElement("option");
+      opt.value = o.value;
+      opt.textContent = o.label;
+      if (o.value === state.meta.theme) opt.selected = true;
+      sel.append(opt);
+    }
+  }
+
+  // ── Load (edit mode): decompose existing markdown into form state ──────
+  async function loadExisting() {
+    // Source markdown (for frontmatter) + parsed cards (typed bodies).
+    const srcRes = await fetch(
+      `/api/decks/mine/${encodeURIComponent(editTopic!)}/${encodeURIComponent(editDeck!)}`,
+      { headers: authHeaders() },
+    );
+    if (srcRes.status === 401) return handle401();
+    if (!srcRes.ok) {
+      setMsg("Could not load that deck.", "err");
+      return;
+    }
+    const { markdown } = await srcRes.json();
+
+    // Parse to typed cards via the JSON preview endpoint (returns DeckDetail).
+    const prevRes = await fetch("/api/decks/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown }),
+    }).catch(() => null);
+
+    // Frontmatter: parse the leading YAML block directly (simple key: value).
+    parseFrontmatter(markdown);
+
+    if (prevRes && prevRes.ok) {
+      const deck = await prevRes.json();
+      state.cards = (deck.cards || []).map((c: { type: string; body: string }) => {
+        const def = TYPES[c.type];
+        const body = c.body ?? "";
+        if (def) {
+          const parsed = def.fromBody(body);
+          if (parsed && def.toBody(parsed).trim() === body.trim()) {
+            return { type: c.type, data: parsed, rawMode: false, raw: "" };
+          }
+        }
+        // Unknown type or non-conforming body → safe raw fallback.
+        return { type: TYPES[c.type] ? c.type : "concept", data: {}, rawMode: true, raw: body };
+      });
+    }
+    if (state.cards.length === 0) state.cards = [newCard("title")];
+  }
+
+  function parseFrontmatter(markdown: string) {
+    const m = markdown.match(/^---\n([\s\S]*?)\n---/);
+    if (!m) return;
+    for (const line of m[1].split("\n")) {
+      const kv = line.match(/^(\w+):\s*(.*)$/);
+      if (!kv) continue;
+      const [, key, rawVal] = kv;
+      let val = rawVal.trim();
+      if (key === "keywords") {
+        val = val.replace(/^\[|\]$/g, "");
+        state.meta.keywords = val
+          .split(",")
+          .map((k) => k.trim().replace(/^["']|["']$/g, ""))
+          .filter(Boolean)
+          .join(", ");
+        continue;
+      }
+      // Unwrap a quoted scalar if present.
+      if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
+        try {
+          val = JSON.parse(val.replace(/^'|'$/g, '"'));
+        } catch {
+          val = val.slice(1, -1);
+        }
+      }
+      if (key in state.meta) (state.meta as any)[key] = val;
+    }
+  }
+
+  // ── Save ───────────────────────────────────────────────────────────────
+  async function save() {
+    const btn = $<HTMLButtonElement>("[data-save]");
+    if (btn) btn.disabled = true;
+    try {
+      const url = isEdit
+        ? `/api/decks/mine/${encodeURIComponent(editTopic!)}/${encodeURIComponent(editDeck!)}`
+        : "/api/decks/mine";
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ markdown: buildMarkdown() }),
+      });
+      if (res.status === 401) return handle401();
+      if (res.ok) return location.assign("/account");
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.detail ?? `Could not save (${res.status}).`, "err");
+    } catch {
+      setMsg("Network error while saving.", "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function init() {
+    if (!jwt()) {
+      location.replace("/login");
+      return;
+    }
+    const titleEl = $<HTMLElement>("[data-title]");
+    const mdLink = $<HTMLAnchorElement>("[data-md-link]");
+
+    if (isEdit) {
+      if (titleEl) titleEl.textContent = "Edit deck";
+      if (mdLink)
+        mdLink.href = `/account/edit?topic=${encodeURIComponent(editTopic!)}&deck=${encodeURIComponent(editDeck!)}`;
+      await loadExisting();
+    } else {
+      state.cards = [newCard("title"), newCard("concept")];
+    }
+
+    bindMeta();
+    await populateThemes();
+    renderCards();
+    $("[data-add]")?.addEventListener("click", () => {
+      state.cards.push(newCard("concept"));
+      renderCards();
+      schedulePreview();
+    });
+    $("[data-save]")?.addEventListener("click", save);
+    render();
+  }
+
+  init();
+</script>
+
+<style>
+  .build {
+    max-width: 78rem;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 2rem) 1.25rem 2.5rem;
+  }
+  .build__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .build__title {
+    margin: 0;
+  }
+  .build__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .build__link {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .build__link:hover {
+    color: var(--vd-accent);
+  }
+  .build__btn {
+    padding: 0.55rem 1.3rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .build__btn:hover {
+    filter: brightness(1.08);
+  }
+  .build__btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .build__msg {
+    margin: 0 0 1rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .build__msg[data-kind="err"] {
+    color: #f87171;
+  }
+  .build__msg[data-kind="ok"] {
+    color: var(--vd-accent);
+  }
+  .build__grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: 1fr;
+  }
+  .build__pane {
+    min-width: 0;
+  }
+
+  fieldset.build__meta,
+  fieldset.build__card {
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-card-bg);
+    padding: 1rem;
+    margin: 0 0 1rem;
+  }
+  legend {
+    padding: 0 0.4rem;
+    color: var(--vd-text-muted);
+    font-size: 0.85rem;
+  }
+
+  .build__field {
+    display: block;
+    margin-bottom: 0.75rem;
+  }
+  .build__field > span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--vd-text-muted);
+    margin-bottom: 0.3rem;
+  }
+  .build__field em {
+    font-style: italic;
+    opacity: 0.8;
+  }
+  .build__field input,
+  .build__field textarea,
+  .build__card-type,
+  [data-theme-select] {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .build__field textarea,
+  .build__raw {
+    min-height: 6rem;
+    resize: vertical;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .build__card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.85rem;
+  }
+  .build__card-num {
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+  }
+  .build__card-type {
+    width: auto;
+    flex: 1;
+  }
+  .build__card-tools {
+    display: flex;
+    gap: 0.3rem;
+  }
+  .build__card-tool {
+    width: 2rem;
+    height: 2rem;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    cursor: pointer;
+    font: inherit;
+  }
+  .build__card-tool:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .build__raw {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+  }
+  .build__raw-toggle {
+    margin-top: 0.4rem;
+    background: none;
+    border: 0;
+    color: var(--vd-text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    text-decoration: underline;
+  }
+  .build__raw-toggle:hover {
+    color: var(--vd-accent);
+  }
+
+  .build__list-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+  }
+  .build__list-row input {
+    flex: 1;
+  }
+  .build__list-del {
+    width: 2rem;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text-muted);
+    cursor: pointer;
+  }
+  .build__list-add {
+    background: none;
+    border: 0;
+    color: var(--vd-text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    text-decoration: underline;
+  }
+
+  .build__add {
+    width: 100%;
+    padding: 0.7rem;
+    background: var(--vd-bg);
+    border: 1px dashed var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    cursor: pointer;
+    font: inherit;
+  }
+  .build__add:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+
+  .build__iframe {
+    width: 100%;
+    min-height: 32rem;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    background: var(--vd-bg);
+  }
+
+  @media (min-width: 60rem) {
+    .build__grid {
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+    .build__pane:last-child {
+      position: sticky;
+      top: 1rem;
+    }
+    .build__iframe {
+      height: 80vh;
+    }
+  }
+</style>

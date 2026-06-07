@@ -9,6 +9,13 @@
  * localStorage. Framework-free, matching the pattern in admin.astro.
  */
 import ReticleMark from "./ReticleMark.astro";
+import { fetchMeta } from "../lib/api";
+
+// The Sandbox is a public "try it" surface — not meaningful on a single-user
+// standalone instance, so only show it on the server edition. Falls back to
+// hidden if /api/meta is unreachable.
+const meta = await fetchMeta().catch(() => null);
+const showSandbox = meta?.edition === "server";
 ---
 
 <header class="nav">
@@ -19,7 +26,7 @@ import ReticleMark from "./ReticleMark.astro";
     </a>
     <div class="nav__links">
       <a class="nav__link" href="/decks">Decks</a>
-      <a class="nav__link" href="/sandbox">Sandbox</a>
+      {showSandbox && <a class="nav__link" href="/sandbox">Sandbox</a>}
       <!-- Logged-out (default, SSR): a single login/signup entry point. -->
       <a class="nav__link nav__auth" href="/login" data-nav-login>Log in / Sign up</a>
       <!-- Logged-in (revealed client-side when a session exists). -->

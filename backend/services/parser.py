@@ -111,6 +111,9 @@ V1_CARD_TYPES = frozenset({"title", "concept", "summary", "graphic", "quote"})
 # Deck frontmatter fields that must be present.
 REQUIRED_DECK_FIELDS = ("title", "author", "topic", "keywords", "theme")
 
+# Optional `visibility` frontmatter field; absent means public.
+VALID_VISIBILITIES = frozenset({"public", "unlisted", "private"})
+
 
 @dataclass
 class ParsedCard:
@@ -230,3 +233,8 @@ def _validate_deck_meta(meta: dict) -> None:
         )
     if not isinstance(meta["keywords"], list):
         raise DeckParseError("deck frontmatter 'keywords' must be a list")
+    if "visibility" in meta and str(meta["visibility"]) not in VALID_VISIBILITIES:
+        raise DeckParseError(
+            f"deck frontmatter 'visibility' must be one of: "
+            f"{', '.join(sorted(VALID_VISIBILITIES))}"
+        )

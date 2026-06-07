@@ -6,7 +6,7 @@
  */
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Reader from "../../components/Reader.astro";
-import { fetchDeck } from "../../lib/api";
+import { fetchDeck, fetchDeckThemeCss } from "../../lib/api";
 
 const { topic, deck } = Astro.params;
 const data = await fetchDeck(topic!, deck!);
@@ -18,41 +18,20 @@ if (!data) {
 // ?embed=1 → a chrome-less first-slide view, used as the portal thumbnail.
 const embed = Astro.url.searchParams.has("embed");
 
-// Built-in themes resolve to bundled stylesheets at build time. Any other
-// theme name is a user's private theme: BaseLayout falls back to default for
-// SSR, and we inject the owner's CSS client-side (below) if they're signed in.
+// Built-in themes resolve to bundled stylesheets in BaseLayout. Any other name
+// is a user's custom theme: BaseLayout falls back to default for SSR, and we
+// inline the deck's theme CSS here (server-side, for ALL viewers) so it
+// overrides the default tokens.
 const BUILTIN_THEMES = new Set(["default", "operazione-stile", "fascicolo"]);
 const customTheme = BUILTIN_THEMES.has(data.theme) ? null : data.theme;
+const customCss = customTheme ? await fetchDeckThemeCss(topic!, deck!) : null;
 ---
 
 <BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme} showNav={false}>
-  <Reader deck={data} topicSlug={topic!} embed={embed} />
+  {/* Inlined after BaseLayout's theme <link>, so its :root tokens win. */}
+  {customCss && <style is:inline set:html={customCss} slot="head"></style>}
+  {/* Unlisted decks are reachable by link but should stay out of search. */}
+  {data.visibility !== "public" && <meta name="robots" content="noindex" slot="head" />}
 
-  {
-    customTheme && (
-      <script is:inline define:vars={{ slug: customTheme }}>
-        {/* Private theme: fetch the owner's CSS (auth-scoped) and inject it.
-            Anonymous/non-owner viewers get no session token → default theme.
-            Runs in the standalone reader and inside the portal's modal iframe. */}
-        (() => {
-          try {
-            const jwt = localStorage.getItem("vd_session");
-            if (!jwt) return;
-            fetch("/api/themes/mine/" + encodeURIComponent(slug) + ".css", {
-              headers: { Authorization: "Bearer " + jwt },
-            })
-              .then((r) => (r.ok ? r.text() : null))
-              .then((css) => {
-                if (!css) return;
-                const s = document.getElementById("vd-custom-theme") || document.createElement("style");
-                s.id = "vd-custom-theme";
-                s.textContent = css;
-                document.head.appendChild(s);
-              })
-              .catch(() => {});
-          } catch (e) {}
-        })();
-      </script>
-    )
-  }
+  <Reader deck={data} topicSlug={topic!} embed={embed} />
 </BaseLayout>

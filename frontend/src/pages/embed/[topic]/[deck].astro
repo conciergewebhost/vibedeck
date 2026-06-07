@@ -12,13 +12,19 @@
  */
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import DeckModal from "../../../components/DeckModal.astro";
-import { fetchDeck } from "../../../lib/api";
+import { fetchDeck, fetchDeckThemeCss } from "../../../lib/api";
 
 const { topic, deck } = Astro.params;
 const data = await fetchDeck(topic!, deck!);
 if (!data) {
   return Astro.rewrite("/404");
 }
+
+// Inline a custom theme server-side so the embed chrome matches the deck.
+const BUILTIN_THEMES = new Set(["default", "operazione-stile", "fascicolo"]);
+const customCss = BUILTIN_THEMES.has(data.theme)
+  ? null
+  : await fetchDeckThemeCss(topic!, deck!);
 
 const url = `/${topic}/${deck}`;
 // Open the deck's modal on the public library, in a new tab. The href is
@@ -38,6 +44,8 @@ const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
 ---
 
 <BaseLayout title={`${data.title} — VibeDeck`} theme={data.theme} showNav={false} showModeToggle={false}>
+  {customCss && <style is:inline set:html={customCss} slot="head"></style>}
+
   <main class="embed">
     <button class="embed__open" type="button" data-embed-open aria-label={`Open ${data.title}`}>
       <span class="embed__thumb">

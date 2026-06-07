@@ -21,7 +21,8 @@ import DeckModal from "../components/DeckModal.astro";
         <p class="portal__email" data-email></p>
       </div>
       <div class="portal__actions">
-        <a class="portal__btn" href="/account/edit">+ New deck</a>
+        <a class="portal__btn" href="/account/build">+ New deck</a>
+        <a class="portal__link" href="/account/edit">write markdown</a>
         <button class="portal__link" type="button" data-logout>Log out</button>
       </div>
     </header>
@@ -29,10 +30,14 @@ import DeckModal from "../components/DeckModal.astro";
     <ul class="deckgrid" data-deck-list></ul>
 
     <section class="portal__themes">
-      <h2 class="portal__subhead">My themes</h2>
+      <div class="portal__themes-head">
+        <h2 class="portal__subhead">My themes</h2>
+        <a class="portal__btn portal__btn--sm" href="/account/theme">+ New theme</a>
+      </div>
       <p class="portal__hint">
-        Private to you. Use one by setting <code>theme: its-name</code> in a deck's
-        frontmatter — it'll render for you, while others see the default theme.
+        Build a custom palette and type with the theme builder, then use it by
+        setting <code>theme: its-name</code> in a deck's frontmatter (or pick it
+        in the deck builder). It renders for everyone who reads that deck.
       </p>
       <ul class="portal__theme-list" data-theme-list></ul>
     </section>
@@ -100,17 +105,18 @@ import DeckModal from "../components/DeckModal.astro";
   }
 
   function renderThemes(themes: { name: string; slug: string }[]) {
-    const section = $<HTMLElement>(".portal__themes");
     const list = $<HTMLUListElement>("[data-theme-list]");
     if (!list) return;
     list.replaceChildren();
-    // Theme upload is paused (pending content moderation), so themes can no
-    // longer be added here. Show this section only to manage existing ones.
+    // The section is always shown now (it hosts "+ New theme"); an empty list
+    // gets a hint instead of hiding.
     if (themes.length === 0) {
-      if (section) section.hidden = true;
+      const li = document.createElement("li");
+      li.className = "portal__empty";
+      li.textContent = "No themes yet. Build one with “+ New theme”.";
+      list.append(li);
       return;
     }
-    if (section) section.hidden = false;
     for (const t of themes) {
       const li = document.createElement("li");
       li.className = "portal__theme";
@@ -213,9 +219,21 @@ import DeckModal from "../components/DeckModal.astro";
     border-top: 1px solid var(--vd-card-border);
     padding-top: 1.5rem;
   }
+  .portal__themes-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+  }
   .portal__subhead {
-    margin: 0 0 0.4rem;
+    margin: 0;
     font-size: 1.2rem;
+  }
+  .portal__btn--sm {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.9rem;
   }
   .portal__hint {
     margin: 0 0 1rem;

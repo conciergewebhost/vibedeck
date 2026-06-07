@@ -288,6 +288,23 @@ def delete_my_deck(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/{topic_slug}/{deck_slug}/theme.css")
+def get_deck_theme(
+    topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
+) -> Response:
+    """The CSS of a deck's custom theme, for any reader (no auth).
+
+    Lets the reader inline a deck's custom theme server-side so every viewer
+    sees it — not just the signed-in owner. Returns 404 for built-in themes or
+    decks with no matching custom theme. (When per-deck visibility lands, this
+    should honour it; today all decks are public.)
+    """
+    css = decks_service.get_deck_theme_css(db, topic_slug, deck_slug)
+    if css is None:
+        raise HTTPException(status_code=404, detail="No custom theme for this deck")
+    return Response(content=css, media_type="text/css")
+
+
 @router.get("/{topic_slug}/{deck_slug}", response_model=DeckDetail)
 def get_deck(
     topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
