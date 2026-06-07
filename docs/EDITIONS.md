@@ -1,22 +1,20 @@
 # Vibedeck Editions — architecture & roadmap
 
-Vibedeck is planned as **three editions** from one core codebase:
+Vibedeck is built to run as **two editions** from one config-driven codebase:
 
 1. **Standalone** — a single user running their own decks on their own server.
 2. **Server** — a host running decks from many users (a shared/community instance).
-3. **Commercial** — a private, hosted, paid product (a revenue stream).
 
-This doc covers the **open-core** concerns (standalone + server) and the architectural decisions that
-keep all three buildable from one codebase. Commercial/revenue specifics are kept **out of this repo**
-in a private companion doc — see "Commercial" below.
+They differ by **configuration, not by a code fork** (an `EDITION` setting drives a set of derived
+feature flags). This doc covers the architecture and the decisions that keep both buildable from one
+codebase.
 
-> Status (2026-06): the codebase is a strong base — **standalone is ~90% there**, **server has the
-> right bones with a few real gaps**, and **commercial has a solid product underneath but all the
-> commercial machinery is greenfield.**
+> Status (2026-06): the codebase is a strong base — **standalone is ~90% there** and **server has the
+> right bones with a few real gaps.**
 
 ---
 
-## Shared foundation (already built — benefits all editions)
+## Shared foundation (already built — benefits both editions)
 
 - **Markdown is the source of truth.** Decks are `.md` files under `UPLOAD_DIR`; the DB only indexes
   frontmatter and **card bodies are re-parsed from the file on read** (`backend/services/parser.py`,
@@ -28,8 +26,10 @@ in a private companion doc — see "Commercial" below.
   endpoints are owner-scoped (`/api/decks/mine`).
 - **Admin portal** (owner-only): manage any deck + monitor users
   (`get_current_admin` in `services/auth.py`, `routers/admin.py`).
+- **Edition seam**: an `EDITION` setting in `backend/config.py` with derived feature flags, exposed
+  to the frontend via `GET /api/meta` so pages adapt without a rebuild.
 - **Theming contract** (`--vd-*` tokens) and the **per-deployment landing** (`index.astro` is
-  gitignored) — a ready-made seam for per-edition customization.
+  gitignored) — a ready-made seam for per-deployment customization.
 
 ---
 
@@ -39,8 +39,8 @@ The original v1 shape; the codebase fits it well. The only friction is that the 
 (signup, invite codes, magic links) is overhead for one person.
 
 **To finish:**
-- A **single-user mode** (config/flag): disable public signup, treat the one account as owner, and
-  optionally allow no-auth public *read*. Mostly configuration, not architecture.
+- A **single-user mode**, keyed on `EDITION == standalone`: disable public signup, treat the one
+  account as owner, and allow no-auth public *read*. Mostly configuration, not architecture.
 
 ---
 
@@ -72,39 +72,28 @@ shared topic index. That's a perfectly valid product ("a small group curating on
 "a variety of users" means **isolated per-user spaces** (URLs like `/u/alice/{topic}/{deck}`, browse
 by author), the topic model and filename scheme need to be **owner-scoped**.
 
-**Decide communal-vs-per-user before the server edition gets real users** — it drives URLs, on-disk
-filenames, and the topic model, and is painful to migrate afterward (URLs break, files move, DB
-changes).
-
----
-
-## 3. Commercial (private, revenue) — product yes, machinery no
-
-The product underneath is a fine base; the commercial edition is a private, hosted, paid build on top
-of the open core, and that work is **planned privately — kept out of this repo by design.**
-
-> See **`EDITIONS-COMMERCIAL.md`** (repo root, **gitignored / local only**).
+**Decision (made): per-user spaces.** This drives URLs, on-disk filenames, and the topic model, and
+is painful to migrate afterward (URLs break, files move, DB changes), so it is sequenced first within
+the server work — before visibility, roles, moderation, and quotas build on top of it.
 
 ---
 
 ## Cross-cutting decisions to make early (cheap now, expensive later)
 
 1. **Namespacing / content model** — communal shared library vs per-user spaces (see Server §). The
-   single most consequential call.
-2. **Edition seam** — one config-driven codebase (e.g. an `EDITION` setting / feature flags) rather
-   than three forks. Standalone and server should differ by configuration, not by code fork.
-3. **Open-core split** — core (standalone + server) stays open; commercial features live behind
-   interfaces / a separate **private** layer that *depends on* the core package, rather than forking
-   the whole codebase. Retrofitting this seam is easier before commercial work begins.
+   single most consequential call. **Decided: per-user spaces.**
+2. **Edition seam** — one config-driven codebase (an `EDITION` setting / feature flags) rather than
+   forks. Standalone and server differ by configuration, not by code.
+3. **Extensibility** — keep limit/policy decisions behind **overridable functions / interfaces** and
+   a feature-flagged seam, so the server can be extended by **private modules** without forking the
+   codebase. The backend loads an optional `private` package if present (`backend/main.py`); when it
+   is absent the deployment runs as plain open core.
 
-## Readiness checklists
+## Readiness checklist
 
 **Server-ready:** content moderation · per-deck visibility · roles (`is_admin`) · quotas + abuse
-controls · the namespace decision.
-
-**Commercial-ready:** see the private `EDITIONS-COMMERCIAL.md`.
+controls · the namespace rework.
 
 ---
 
-_Companion docs: `SPEC.md` (product spec + roadmap), `HANDOFF.md` (current v2 operational state),
-`EDITIONS-COMMERCIAL.md` (private, local — commercial/revenue strategy)._
+_Companion docs: `SPEC.md` (product spec + roadmap), `HANDOFF.md` (current v2 operational state)._

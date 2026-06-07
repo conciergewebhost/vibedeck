@@ -5,9 +5,27 @@ Run the backend from the backend/ directory so the import paths below
 (`from config import settings`) resolve as flat modules.
 """
 
+from enum import Enum
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Edition(str, Enum):
+    """How this deployment is run, from one config-driven codebase.
+
+    `standalone` — a single person on their own server: no public sign-up
+        surface; the one account is the owner.
+    `server` — a host running many users' decks: public (invite-gated)
+        sign-up, and the multi-user controls (moderation, per-deck
+        visibility, quotas) are enabled.
+
+    The edition drives the derived feature flags on Settings below; nothing in
+    the app branches on the raw EDITION value directly.
+    """
+
+    STANDALONE = "standalone"
+    SERVER = "server"
 
 
 class Settings(BaseSettings):
@@ -23,6 +41,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: Path
     BASE_URL: str = "http://localhost:4321"
     ENVIRONMENT: str = "development"
+
+    # Which edition this deployment runs as (see Edition above). Defaults to
+    # standalone — the right default for a fresh clone. A multi-user host sets
+    # EDITION=server in its .env.
+    EDITION: Edition = Edition.STANDALONE
 
     # Shared-token gate for the /admin web surface, and the account that
     # token-gated (and CLI) uploads are attributed to. Required.
@@ -52,6 +75,42 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    # ── Derived edition feature flags ─────────────────────────────────────
+    # Computed from EDITION so the editions differ by configuration, not by a
+    # code fork. The /api/meta endpoint exposes these (non-secret) to the
+    # frontend so it can adapt its UI without a rebuild.
+
+    @property
+    def is_server(self) -> bool:
+        return self.EDITION == Edition.SERVER
+
+    @property
+    def allow_public_signup(self) -> bool:
+        """Whether strangers may request an account. Standalone is single-user,
+        so the (invite-gated) sign-up surface is off; server allows it."""
+        return self.is_server
+
+    @property
+    def allow_anon_read(self) -> bool:
+        """Whether decks are readable without a session. True in both editions
+        today; this is the seam for requiring auth on private decks later."""
+        return True
+
+    @property
+    def moderation_enabled(self) -> bool:
+        """Server-only: content moderation on user-submitted decks."""
+        return self.is_server
+
+    @property
+    def visibility_enabled(self) -> bool:
+        """Server-only: per-deck public/private/unlisted visibility."""
+        return self.is_server
+
+    @property
+    def quotas_enabled(self) -> bool:
+        """Server-only: per-user deck/storage quotas and abuse controls."""
+        return self.is_server
 
 
 # Single import-time instance; FastAPI dependencies read from this.

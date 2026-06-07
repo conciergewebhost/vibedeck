@@ -125,6 +125,12 @@ def request_link(
         is_signup = False
     else:
         # Unknown (or inactive) email → treat as signup, gated by the code.
+        # Standalone is single-user: there is no public sign-up at all.
+        if not settings.allow_public_signup:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="New account sign-up is disabled on this instance.",
+            )
         expected = settings.NEW_USER_CODE.encode("utf-8")
         submitted = (body.code or "").encode("utf-8")
         if not hmac.compare_digest(submitted, expected):

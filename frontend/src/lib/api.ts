@@ -76,6 +76,18 @@ export interface PublicDeckItem {
   updated_at: string | null;
 }
 
+export interface SiteMeta {
+  edition: string;
+  allow_public_signup: boolean;
+  allow_anon_read: boolean;
+  moderation_enabled: boolean;
+  visibility_enabled: boolean;
+  quotas_enabled: boolean;
+}
+
+/** Non-secret deployment flags (edition + feature toggles) for UI adaptation. */
+export const fetchMeta = () => getJson<SiteMeta>("/api/meta");
+
 export const fetchTopics = () => getJson<TopicSummary[]>("/api/topics");
 export const fetchPublicDecks = () =>
   getJson<PublicDeckItem[]>("/api/decks/public");

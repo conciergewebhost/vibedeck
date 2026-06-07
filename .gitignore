@@ -27,9 +27,14 @@ decks/*.md
 !decks/vibedeck__crafting-a-vibedeck-theme.md
 
 # ── Local, box-specific docs (never committed) ────────────────
-# Operational notes + private commercial strategy; kept on the box only.
+# Operational notes + private, box-only strategy notes; kept on the box only.
 HANDOFF.md
 EDITIONS-COMMERCIAL.md
+
+# ── Optional private add-on layer (kept out of this repo) ──────
+# A `private` package the backend loads if present (see main.py); open-core
+# deployments run without it.
+backend/private/
 
 # ── Claude Code local settings ────────────────────────────────
 .claude/settings.local.json

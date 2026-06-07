@@ -35,8 +35,36 @@ app.include_router(decks.router, prefix="/api/decks", tags=["decks"])
 app.include_router(themes.router, prefix="/api/themes", tags=["themes"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
+# Optional private add-on layer, kept out of this repo. If a `private` package
+# is present on the box, give it a chance to register extra routes / overrides;
+# open-core deployments simply run without it. This is the single extension
+# seam — nothing here depends on it existing.
+try:
+    import private  # type: ignore
+except ImportError:
+    private = None
+if private is not None and hasattr(private, "register"):
+    private.register(app)
+
 
 @app.get("/api/health", tags=["meta"])
 def health() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok", "environment": settings.ENVIRONMENT}
+
+
+@app.get("/api/meta", tags=["meta"])
+def meta() -> dict[str, object]:
+    """Non-secret deployment flags the frontend reads to adapt its UI.
+
+    Lets Astro pages show/hide affordances (e.g. the sign-up surface) per
+    edition without a rebuild. Safe to expose publicly — booleans only.
+    """
+    return {
+        "edition": settings.EDITION.value,
+        "allow_public_signup": settings.allow_public_signup,
+        "allow_anon_read": settings.allow_anon_read,
+        "moderation_enabled": settings.moderation_enabled,
+        "visibility_enabled": settings.visibility_enabled,
+        "quotas_enabled": settings.quotas_enabled,
+    }

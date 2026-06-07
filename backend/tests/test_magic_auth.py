@@ -35,7 +35,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 import main  # noqa: E402
-from config import settings  # noqa: E402
+from config import Edition, settings  # noqa: E402
 from database import Base, get_db  # noqa: E402
 from models import User  # noqa: E402
 from routers import auth as auth_router  # noqa: E402
@@ -90,6 +90,11 @@ class _AppTestCase(unittest.TestCase):
     """Base class wiring the app to an isolated in-memory SQLite DB."""
 
     def setUp(self):
+        # These exercise the multi-user signup/login flow, which only exists
+        # in the server edition; pin it regardless of the default edition.
+        self._prev_edition = settings.EDITION
+        settings.EDITION = Edition.SERVER
+
         self.engine = create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
@@ -114,6 +119,7 @@ class _AppTestCase(unittest.TestCase):
         auth_router._bad_code_limiter.clear()
 
     def tearDown(self):
+        settings.EDITION = self._prev_edition
         main.app.dependency_overrides.clear()
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
@@ -159,6 +165,17 @@ class TestRequestLink(_AppTestCase):
             json={"email": "MixedCase@E.com", "code": settings.NEW_USER_CODE},
         )
         self.assertEqual(sender.call_args.kwargs["to"], "mixedcase@e.com")
+
+    @mock.patch("routers.auth.send_magic_link")
+    def test_standalone_edition_disables_signup_even_with_code(self, sender):
+        # Standalone is single-user: no public sign-up, regardless of the code.
+        settings.EDITION = Edition.STANDALONE
+        resp = self.client.post(
+            "/api/auth/request-link",
+            json={"email": "new@e.com", "code": settings.NEW_USER_CODE},
+        )
+        self.assertEqual(resp.status_code, 403)
+        sender.assert_not_called()
 
 
 class TestSlidingWindowLimiter(unittest.TestCase):
