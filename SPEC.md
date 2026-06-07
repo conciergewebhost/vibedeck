@@ -67,6 +67,7 @@ description: A beginner-friendly introduction to the 12 houses in astrology.
 | `keywords` | Yes | Array of thematic tags for filtering |
 | `theme` | Yes | CSS theme identifier |
 | `description` | No | Short deck summary for index listing |
+| `visibility` | No | `public` (default, listed), `unlisted` (readable by link, kept out of listings), or `private` (owner-only; the public reader returns 404) |
 
 ### Card Separator
 Cards are separated by `---` within the markdown file.
@@ -184,11 +185,15 @@ type: quote
 
 ## Theming
 
-- Themes defined as CSS variable sets
+- Themes defined as CSS variable sets (the `--vd-*` token contract)
 - Theme selected via `theme` field in deck frontmatter
 - Each topic can have a signature theme
-- v1 ships with a small set of built-in themes
-- Custom themes via additional CSS variable files
+- A small set of built-in themes ship bundled
+- **Custom per-user themes** built with a **form-based theme builder** (`/account/theme`):
+  pick colours, sizes, and a curated font; it generates a safe `:root{…}` token block (no raw
+  CSS upload). Curated web fonts are preloaded app-side (`src/lib/fonts.ts`).
+- A deck's custom theme is **inlined server-side for every reader** (`GET /api/decks/{topic}/{deck}/theme.css`),
+  so it shows for anyone viewing the deck, not just the signed-in owner.
 
 ---
 
@@ -197,7 +202,7 @@ type: quote
 Auth is baked into the data model from day one, even though v1 content is publicly browsable without login.
 
 This positions the platform for:
-- Private decks (auth-gated content)
+- Private decks (auth-gated content) — **implemented**: per-deck `visibility` (public/unlisted/private)
 - Multi-user publishing
 - Per-user deck libraries
 
@@ -205,13 +210,17 @@ Implementation: standard JWT-based auth, user table in PostgreSQL from initial s
 
 ---
 
-## Upload Interface
+## Authoring & Upload
 
-- Web-based markdown file upload from day one
-- Parses frontmatter on upload, validates required fields
-- Generates deck slug from title
-- Stores deck file and registers metadata in PostgreSQL
-- Auth-protected (logged-in users only)
+Logged-in users author decks in the browser; everything funnels through the same parser/validator and
+stores the markdown file as the source of truth (metadata indexed in PostgreSQL).
+
+- **Form-based deck builder** (`/account/build`) — per-card-type fields (title/concept/summary/quote/graphic)
+  with add/reorder and a per-card "edit as markdown" fallback. Assembles the deck markdown for you.
+- **Markdown editor** (`/account/edit`) — raw markdown with live preview, for those who prefer it.
+- **Sandbox** (`/sandbox`, server edition) — non-persistent live preview via `POST /api/decks/preview`.
+- Parses frontmatter on save, validates required fields, generates the slug from the title.
+- Raw markdown **file upload** is admin-only (`POST /api/decks/upload`).
 
 ---
 
@@ -225,6 +234,8 @@ Anyone can clone the repo and run their own instance. Documentation covers VPS d
 
 ### SEO Note
 Content-specific deployments (e.g. Z13 educational material) should run on their own domain instances rather than on vibedeck.online, so that content authority accrues to the relevant domain rather than to the platform domain.
+
+Unlisted and private decks are served with `noindex` (and private decks 404 publicly), so they never accrue search authority.
 
 ---
 
@@ -243,14 +254,18 @@ Content-specific deployments (e.g. Z13 educational material) should run on their
 
 ### v2
 - [x] User-facing auth (passwordless magic-link login, invite-gated signup, `/account` portal)
-- [x] Custom theme upload (per-user **private** themes) — _upload UI paused pending content moderation_
+- [x] Edition seam (`EDITION` setting) + **standalone** single-user mode
+- [x] **Form-based deck builder** (`/account/build`) + in-browser markdown editor
+- [x] **Form-based theme builder** (`/account/theme`) — per-user themes without raw-CSS upload;
+      a deck's custom theme renders for **all** readers (SSR-inlined)
+- [x] **Per-deck visibility** — public / unlisted / private
 - [x] Admin portal: view/delete any deck + monitor users (owner-only)
-- [ ] **Content moderation for user-submitted content** — SEO/link-abuse + hurtful/harmful detection.
-      Deck & theme *upload* UI on `/account` is disabled until this lands (see HANDOFF.md for the
-      design discussion). Admin can already view/delete any deck and monitor users.
+- [ ] **Content moderation for user-submitted deck text** — SEO/link-abuse + hurtful/harmful detection.
+      In-browser authoring (builder + editor) is available; raw markdown *file upload* stays admin-only,
+      and the theme builder is safe by construction (constrained tokens). Deck **body text** still needs
+      moderation before fully opening submissions (see HANDOFF.md for the design discussion).
 - [ ] Keyword filtering UI on deck index
 - [ ] Search across decks
-- [ ] Private/public deck toggle _(all decks are public today)_
 - [ ] Transition effects between cards
 - [ ] Optional progressive reveal of bullet points (one at a time)
 

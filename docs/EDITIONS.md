@@ -22,13 +22,19 @@ codebase.
 - Clean layering: thin routers → services → SQLAlchemy/Alembic; Astro SSR front end; Caddy + systemd
   ops. Easy to extend.
 - **Auth**: JWT + passwordless magic-link login, invite-gated signup, bcrypt (`services/auth.py`).
-- **Multi-user ownership**: users own decks (`Deck.owner_id`) and **private** per-user themes; user
-  endpoints are owner-scoped (`/api/decks/mine`).
+- **Multi-user ownership**: users own decks (`Deck.owner_id`) and per-user themes; user endpoints are
+  owner-scoped (`/api/decks/mine`).
+- **Form-based authoring**: a deck builder (`/account/build`, per-card-type fields) and a theme builder
+  (`/account/theme`, generates a safe `:root{--vd-*}` block — no raw-CSS upload), alongside the raw
+  markdown editor. Lowers the bar for non-technical authors.
+- **Per-deck visibility**: `public` / `unlisted` / `private` (frontmatter + `Deck.visibility`).
+  Listings show public only; private 404s the public reader and renders only for the owner.
 - **Admin portal** (owner-only): manage any deck + monitor users
   (`get_current_admin` in `services/auth.py`, `routers/admin.py`).
 - **Edition seam**: an `EDITION` setting in `backend/config.py` with derived feature flags, exposed
   to the frontend via `GET /api/meta` so pages adapt without a rebuild.
-- **Theming contract** (`--vd-*` tokens) and the **per-deployment landing** (`index.astro` is
+- **Theming contract** (`--vd-*` tokens), custom themes **inlined for every reader** at SSR
+  (`GET /api/decks/{topic}/{deck}/theme.css`), and the **per-deployment landing** (`index.astro` is
   gitignored) — a ready-made seam for per-deployment customization.
 
 ---
@@ -50,14 +56,15 @@ Already present: accounts, per-user ownership, private themes, admin oversight, 
 rate limiting, upload size caps.
 
 **Gaps to close:**
-- **Content moderation** — required before hosting others' content. Already tracked (see `SPEC.md`
+- **Content moderation** — required before hosting others' deck text. Already tracked (see `SPEC.md`
   roadmap + `HANDOFF.md`).
-- **Per-deck visibility** — public / private / unlisted. Today **all decks are public**
-  (`list_public_decks` returns every indexed deck; there is no visibility flag).
 - **Roles** — "admin" is currently a single owner-email check (`get_current_admin`). A real host
   wants promotable admins/moderators (an `is_admin` column).
 - **Quotas + abuse controls** — per-user deck/storage limits, a report/takedown path, and a user
   ban/deactivate UI (`User.is_active` exists; no admin control surfaces it yet).
+
+**Already closed:** ~~per-deck visibility~~ — `public` / `unlisted` / `private` shipped
+(`Deck.visibility`; built in standalone, applies to both editions).
 
 ### ⚠️ The key architectural decision: the content namespace
 
@@ -91,8 +98,8 @@ the server work — before visibility, roles, moderation, and quotas build on to
 
 ## Readiness checklist
 
-**Server-ready:** content moderation · per-deck visibility · roles (`is_admin`) · quotas + abuse
-controls · the namespace rework.
+**Server-ready:** content moderation · roles (`is_admin`) · quotas + abuse controls · the namespace
+rework. (Per-deck visibility — done.)
 
 ---
 

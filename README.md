@@ -20,11 +20,15 @@ happens to work beautifully in a presentation context.
 - **Five card types** — `title`, `concept`, `summary`, `graphic`, `quote`.
 - **Mobile-first reader** — one card at a time, swipe / arrow-key / button nav,
   progress indicator, and an index modal for jumping around.
-- **CSS-variable theming** — ships with `operazione-stile` and `fascicolo`
-  (plus a plain `default`), each with a **dark/light toggle** that follows the
-  OS preference.
-- **Auth-gated uploads** — a discreet `/admin` surface (shared-token gate) and
-  a JWT API for uploading/managing decks remotely.
+- **In-browser authoring** — a form-based **deck builder** and a raw **markdown editor**
+  in the `/account` portal, with live preview (no file upload needed).
+- **CSS-variable theming** — built-in themes (`operazione-stile`, `fascicolo`, `default`)
+  with an OS-aware **dark/light toggle**, plus a form-based **theme builder** for per-user
+  custom themes that render for **every** reader of a deck.
+- **Per-deck visibility** — `public`, `unlisted` (link-only), or `private` (owner-only).
+- **Two editions from one codebase** — an `EDITION` setting selects **standalone**
+  (single user) or **server** (multi-user host). See [`docs/EDITIONS.md`](docs/EDITIONS.md).
+- **Auth** — passwordless magic-link login + a discreet shared-token `/admin` surface.
 - **Server-side management CLI** — index, list, and delete decks from files.
 
 ---
@@ -108,6 +112,7 @@ Edit `.env` and set:
 | `UPLOAD_OWNER_EMAIL` | the account that uploaded/indexed decks belong to |
 | `BASE_URL` | `http://localhost:4321` for local dev |
 | `ENVIRONMENT` | `development` |
+| `EDITION` | `standalone` (single user, no public signup) or `server` (multi-user host); defaults to `standalone` |
 
 ### 4. Backend
 
@@ -178,19 +183,21 @@ Kept deliberately small. The constraint is the feature.
 ```
 
 **Frontmatter:** `title`, `author`, `topic`, `keywords`, `theme` are required;
-`description` is optional. **Card types:** `title`, `concept`, `summary`,
-`graphic`, `quote`. **Themes:** `operazione-stile`, `fascicolo`, `default`
-(see `frontend/src/styles/themes/`). A card body cannot contain a line that is
-exactly `---` (that's the card separator — use `***` for a horizontal rule).
+`description` and `visibility` (`public` / `unlisted` / `private`) are optional.
+**Card types:** `title`, `concept`, `summary`, `graphic`, `quote`. **Themes:**
+`operazione-stile`, `fascicolo`, `default` (see `frontend/src/styles/themes/`),
+or a per-user theme built in the theme builder. A card body cannot contain a line
+that is exactly `---` (that's the card separator — use `***` for a horizontal rule).
 
 ### Adding a deck
 
-Two ways:
-
+- **In the browser:** sign in and use the `/account` portal — the **deck builder**
+  (`/account/build`, guided form) or the **markdown editor** (`/account/edit`), and the
+  **theme builder** (`/account/theme`) for custom styles. This is the normal path.
 - **From the server (CLI):** drop the `.md` file into `decks/` and run
   `python manage.py reindex` (from `backend/`). `reindex` also prunes decks
   whose files were removed.
-- **Over the web:** visit `/admin`, enter the `UPLOAD_TOKEN`, and upload the
+- **Over the web (admin):** visit `/admin`, enter the `UPLOAD_TOKEN`, and upload the
   file. Uploaded decks are attributed to `UPLOAD_OWNER_EMAIL`.
 
 ---
@@ -237,6 +244,7 @@ handles TLS automatically.
 ## Documentation
 
 - [`SPEC.md`](SPEC.md) — the full product specification.
+- [`docs/EDITIONS.md`](docs/EDITIONS.md) — the standalone/server edition architecture and roadmap.
 - [`CLAUDE.md`](CLAUDE.md) — conventions and working notes (for contributors and
   AI coding assistants).
 
