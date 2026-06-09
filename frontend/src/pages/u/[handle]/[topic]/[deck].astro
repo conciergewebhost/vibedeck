@@ -1,0 +1,40 @@
+---
+/**
+ * Namespaced deck reader  ->  /u/{handle}/{topic}/{deck-slug}
+ * The canonical reader under per-user spaces (server edition); identical to
+ * the flat reader but resolved in the owner's namespace. Renders in both
+ * editions — standalone simply never links here.
+ */
+import BaseLayout from "../../../../layouts/BaseLayout.astro";
+import Reader from "../../../../components/Reader.astro";
+import { fetchDeckByHandle, fetchDeckThemeCssByHandle } from "../../../../lib/api";
+
+const { handle, topic, deck } = Astro.params;
+const data = await fetchDeckByHandle(handle!, topic!, deck!);
+
+if (!data) {
+  return Astro.rewrite("/404");
+}
+
+// ?embed=1 → a chrome-less first-slide view, used as the portal thumbnail.
+const embed = Astro.url.searchParams.has("embed");
+
+// Built-in themes resolve to bundled stylesheets in BaseLayout. Any other name
+// is a user's custom theme: BaseLayout falls back to default for SSR, and we
+// inline the deck's theme CSS here (server-side, for ALL viewers) so it
+// overrides the default tokens.
+const BUILTIN_THEMES = new Set(["default", "operazione-stile", "fascicolo"]);
+const customTheme = BUILTIN_THEMES.has(data.theme) ? null : data.theme;
+const customCss = customTheme
+  ? await fetchDeckThemeCssByHandle(handle!, topic!, deck!)
+  : null;
+---
+
+<BaseLayout title={`${data.title} — Vibedeck`} theme={data.theme} showNav={false}>
+  {/* Inlined after BaseLayout's theme <link>, so its :root tokens win. */}
+  {customCss && <style is:inline set:html={customCss} slot="head"></style>}
+  {/* Unlisted decks are reachable by link but should stay out of search. */}
+  {data.visibility !== "public" && <meta name="robots" content="noindex" slot="head" />}
+
+  <Reader deck={data} topicSlug={topic!} embed={embed} />
+</BaseLayout>

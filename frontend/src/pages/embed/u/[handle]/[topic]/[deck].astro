@@ -1,0 +1,157 @@
+---
+/**
+ * /embed/u/{handle}/{topic}/{deck} — the embeddable deck widget, namespaced.
+ *
+ * The canonical embed under per-user spaces; same widget as the flat
+ * /embed/{topic}/{deck} but resolved in the owner's namespace. Meant to be
+ * iframed on third-party pages; clicking opens the shared deck modal with
+ * the full reader and no owner actions. Chrome-less (no navbar).
+ */
+import BaseLayout from "../../../../../layouts/BaseLayout.astro";
+import DeckModal from "../../../../../components/DeckModal.astro";
+import { fetchDeckByHandle, fetchDeckThemeCssByHandle } from "../../../../../lib/api";
+
+const { handle, topic, deck } = Astro.params;
+const data = await fetchDeckByHandle(handle!, topic!, deck!);
+if (!data) {
+  return Astro.rewrite("/404");
+}
+
+// Inline a custom theme server-side so the embed chrome matches the deck.
+const BUILTIN_THEMES = new Set(["default", "operazione-stile", "fascicolo"]);
+const customCss = BUILTIN_THEMES.has(data.theme)
+  ? null
+  : await fetchDeckThemeCssByHandle(handle!, topic!, deck!);
+
+// The API's canonical url for this deck (namespaced in the server edition).
+const url = data.url;
+// Open the deck's modal on the public library, in a new tab. The href is
+// relative to this page's origin (the iframe's document), so it lands on
+// the site even when the widget is embedded elsewhere.
+const viewUrl = `/decks?deck=${encodeURIComponent(url)}`;
+const deckObj = {
+  topic: topic!,
+  slug: deck!,
+  title: data.title,
+  url,
+  card_count: data.cards.length,
+  created_at: null,
+  updated_at: null,
+};
+const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
+---
+
+<BaseLayout title={`${data.title} — VibeDeck`} theme={data.theme} showNav={false} showModeToggle={false}>
+  {customCss && <style is:inline set:html={customCss} slot="head"></style>}
+
+  <main class="embed">
+    <button class="embed__open" type="button" data-embed-open aria-label={`Open ${data.title}`}>
+      <span class="embed__thumb">
+        <iframe
+          src={`${url}?embed=1`}
+          title={data.title}
+          loading="lazy"
+          scrolling="no"
+          tabindex="-1"
+          aria-hidden="true"></iframe>
+      </span>
+      <span class="embed__title">{data.title}</span>
+    </button>
+    <div class="embed__bar">
+      <span class="embed__hint">Click to read</span>
+      <a
+        class="embed__ext"
+        href={viewUrl}
+        target="_blank"
+        rel="noopener">View on v2.vibedeck.online ↗</a>
+    </div>
+  </main>
+
+  <DeckModal embeddable={false} />
+
+  <script type="application/json" id="embed-deck" set:html={deckJson}></script>
+  <script>
+    const el = document.getElementById("embed-deck");
+    const deck = el ? JSON.parse(el.textContent || "{}") : null;
+
+    function whenReady(cb: () => void) {
+      if ((window as any).Vibedeck) cb();
+      else document.addEventListener("vibedeck:ready", cb, { once: true });
+    }
+
+    document.querySelector("[data-embed-open]")?.addEventListener("click", () => {
+      whenReady(() => deck && (window as any).Vibedeck.openDeck(deck));
+    });
+  </script>
+</BaseLayout>
+
+<style>
+  /* Fill the iframe so the preview is as large as the embedder allots. */
+  .embed {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--vd-card-bg);
+  }
+  .embed__open {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--vd-text);
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+  }
+  .embed__thumb {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: var(--vd-bg);
+  }
+  /* Render the first slide at the thumbnail's own size (legible, not scaled
+     down). pointer-events off so the click hits the button. */
+  .embed__thumb iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    pointer-events: none;
+  }
+  .embed__title {
+    font-family: var(--vd-font-heading);
+    font-size: 1.3rem;
+    line-height: 1.15;
+    color: var(--vd-heading);
+    padding: 0.7rem 1rem 0.2rem;
+  }
+  .embed__open:hover .embed__title {
+    color: var(--vd-accent);
+  }
+  .embed__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem 0.8rem;
+    border-top: 1px solid var(--vd-card-border);
+  }
+  .embed__hint {
+    color: var(--vd-text-muted);
+    font-size: 0.8rem;
+  }
+  .embed__ext {
+    color: var(--vd-accent);
+    font-size: 0.8rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .embed__ext:hover {
+    text-decoration: underline;
+  }
+</style>

@@ -1,0 +1,128 @@
+---
+/**
+ * Author page  ->  /u/{handle}
+ * An author's public decks as thumbnail cards, grouped by topic — the same
+ * card/modal treatment as the /decks library, scoped to one user's space.
+ */
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import DeckModal from "../../../components/DeckModal.astro";
+import { fetchUserDecks, fetchUserProfile } from "../../../lib/api";
+
+const { handle } = Astro.params;
+const profile = await fetchUserProfile(handle!);
+if (!profile) {
+  return Astro.rewrite("/404");
+}
+const decks = (await fetchUserDecks(handle!)) ?? [];
+
+// Group decks by topic, preserving the API's order (topic name, then title).
+type Group = { slug: string; name: string; decks: typeof decks };
+const groups: Group[] = [];
+const byTopic = new Map<string, number>();
+for (const d of decks) {
+  if (!byTopic.has(d.topic)) {
+    byTopic.set(d.topic, groups.length);
+    groups.push({ slug: d.topic, name: d.topic_name, decks: [] });
+  }
+  groups[byTopic.get(d.topic)!].decks.push(d);
+}
+
+// `<` escaped so a deck title containing "</script>" can't break out.
+const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
+---
+
+<BaseLayout title={`@${handle} — Vibedeck`}>
+  <main class="author">
+    <header class="author__head">
+      <h1 class="author__title">@{handle}</h1>
+      <p class="author__tag">
+        {profile.deck_count} public deck{profile.deck_count === 1 ? "" : "s"}
+      </p>
+    </header>
+
+    {
+      groups.length === 0 ? (
+        <p class="author__empty">No public decks yet.</p>
+      ) : (
+        groups.map((g) => (
+          <section class="topic-group">
+            <h2 class="topic-group__title">{g.name}</h2>
+            <ul class="deckgrid" data-topic-grid={g.slug} />
+          </section>
+        ))
+      )
+    }
+  </main>
+
+  <script type="application/json" id="decks-data" set:html={decksJson}></script>
+  <DeckModal />
+</BaseLayout>
+
+<script>
+  function whenReady(cb: () => void) {
+    if ((window as any).Vibedeck) cb();
+    else document.addEventListener("vibedeck:ready", cb, { once: true });
+  }
+
+  type Deck = { topic: string; slug: string; url: string };
+  type Group = { slug: string; name: string; decks: Deck[] };
+
+  const dataEl = document.getElementById("decks-data");
+  const groups: Group[] = dataEl ? JSON.parse(dataEl.textContent || "[]") : [];
+
+  whenReady(() => {
+    const V = (window as any).Vibedeck;
+    for (const g of groups) {
+      const grid = document.querySelector<HTMLUListElement>(`[data-topic-grid="${g.slug}"]`);
+      if (!grid) continue;
+      for (const d of g.decks) grid.append(V.buildCard(d));
+    }
+  });
+
+  // When the owner deletes a deck from the modal, drop its card (and the
+  // topic section if it's now empty).
+  document.addEventListener("vibedeck:deck-deleted", (e) => {
+    const { topic, slug } = (e as CustomEvent).detail;
+    const li = document.querySelector(`[data-deck-key="${topic}/${slug}"]`);
+    const grid = li?.closest<HTMLElement>("[data-topic-grid]");
+    li?.remove();
+    if (grid && grid.children.length === 0) grid.closest(".topic-group")?.remove();
+  });
+</script>
+
+<style>
+  .author {
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3.5rem) 1.5rem;
+  }
+  .author__title {
+    font-size: clamp(2rem, 8vw, 3.5rem);
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.03em;
+    background: linear-gradient(90deg, var(--vd-accent), var(--vd-accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .author__tag {
+    color: var(--vd-text-muted);
+    margin: 0 0 2.5rem;
+  }
+  .author__empty {
+    color: var(--vd-text-muted);
+  }
+  .topic-group {
+    margin-bottom: clamp(2rem, 6vw, 3rem);
+  }
+  .topic-group__title {
+    font-family: var(--vd-font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: clamp(1.3rem, 4vw, 1.8rem);
+    color: var(--vd-heading);
+    margin: 0 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--vd-card-border);
+  }
+</style>

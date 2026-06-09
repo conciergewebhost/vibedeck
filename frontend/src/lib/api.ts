@@ -18,6 +18,8 @@ export interface TopicSummary {
   theme: string | null;
   deck_count: number;
   top_keywords: string[];
+  url: string; // canonical topic path (edition-shaped; /u/{handle}/… on server)
+  owner_handle: string | null;
 }
 
 export interface DeckListItem {
@@ -28,6 +30,7 @@ export interface DeckListItem {
   theme: string;
   keywords: string[];
   card_count: number;
+  url: string; // canonical reader path (edition-shaped)
 }
 
 export interface TopicDetail {
@@ -36,6 +39,8 @@ export interface TopicDetail {
   description: string | null;
   theme: string | null;
   decks: DeckListItem[];
+  url: string;
+  owner_handle: string | null;
 }
 
 export interface Card {
@@ -54,6 +59,8 @@ export interface DeckDetail {
   visibility: string; // "public" | "unlisted" | "private"
   keywords: string[];
   cards: Card[];
+  url: string; // canonical reader path ("" for sandbox previews)
+  owner_handle: string | null;
 }
 
 async function getJson<T>(path: string): Promise<T | null> {
@@ -73,8 +80,15 @@ export interface PublicDeckItem {
   author: string;
   card_count: number;
   url: string;
+  owner_handle: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface UserProfile {
+  handle: string;
+  deck_count: number;
+  created_at: string;
 }
 
 export interface SiteMeta {
@@ -84,6 +98,7 @@ export interface SiteMeta {
   moderation_enabled: boolean;
   visibility_enabled: boolean;
   quotas_enabled: boolean;
+  user_spaces_enabled: boolean;
 }
 
 /** Non-secret deployment flags (edition + feature toggles) for UI adaptation. */
@@ -98,6 +113,36 @@ export const fetchDeck = (topic: string, deck: string) =>
   getJson<DeckDetail>(
     `/api/decks/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}`,
   );
+
+// ── Namespaced (per-user space) fetchers — /u/{handle}/… pages ──────────
+
+export const fetchDeckByHandle = (handle: string, topic: string, deck: string) =>
+  getJson<DeckDetail>(
+    `/api/decks/u/${encodeURIComponent(handle)}/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}`,
+  );
+
+export const fetchUserProfile = (handle: string) =>
+  getJson<UserProfile>(`/api/users/${encodeURIComponent(handle)}`);
+
+export const fetchUserDecks = (handle: string) =>
+  getJson<PublicDeckItem[]>(`/api/users/${encodeURIComponent(handle)}/decks`);
+
+export const fetchUserTopic = (handle: string, topic: string) =>
+  getJson<TopicDetail>(
+    `/api/users/${encodeURIComponent(handle)}/topics/${encodeURIComponent(topic)}`,
+  );
+
+export async function fetchDeckThemeCssByHandle(
+  handle: string,
+  topic: string,
+  deck: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `${API_BASE}/api/decks/u/${encodeURIComponent(handle)}/${encodeURIComponent(topic)}/${encodeURIComponent(deck)}/theme.css`,
+  );
+  if (!res.ok) return null;
+  return res.text();
+}
 
 /**
  * CSS of a deck's custom theme, or null if it uses a built-in theme (404).
