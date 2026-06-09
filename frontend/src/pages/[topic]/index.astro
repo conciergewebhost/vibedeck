@@ -1,16 +1,22 @@
 ---
 /**
- * Topic deck-index page  ->  /{topic}
- * Lists all decks in a topic. Applies the topic's signature theme.
+ * Flat topic deck-index page  ->  /{topic}
+ * Canonical in the standalone edition. In the server edition it 301s to the
+ * topic's /u/{handle}/{topic} home when the slug is unambiguous, else 404s.
  */
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { fetchTopic } from "../../lib/api";
+import { fetchMeta, fetchTopic } from "../../lib/api";
 
 const { topic } = Astro.params;
 const data = await fetchTopic(topic!);
 
 if (!data) {
   return Astro.rewrite("/404");
+}
+
+const meta = await fetchMeta().catch(() => null);
+if (meta?.user_spaces_enabled && data.url) {
+  return Astro.redirect(data.url, 301);
 }
 ---
 
@@ -27,7 +33,7 @@ if (!data) {
         <ul class="deck-list">
           {data.decks.map((d) => (
             <li class="deck-card">
-              <a href={`/${data.slug}/${d.slug}`}>
+              <a href={d.url}>
                 <h2>{d.title}</h2>
                 {d.description && <p class="deck-card__desc">{d.description}</p>}
                 <p class="deck-card__meta">

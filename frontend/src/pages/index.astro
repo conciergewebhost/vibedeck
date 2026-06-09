@@ -29,7 +29,7 @@ const featured = (
             topic,
             slug,
             title: d.title,
-            url: `/${topic}/${slug}`,
+            url: d.url, // canonical (namespaced in the server edition)
             card_count: d.cards.length,
             created_at: null,
             updated_at: null,

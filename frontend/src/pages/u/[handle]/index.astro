@@ -80,10 +80,10 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
   });
 
   // When the owner deletes a deck from the modal, drop its card (and the
-  // topic section if it's now empty).
+  // topic section if it's now empty). Cards are keyed by canonical url.
   document.addEventListener("vibedeck:deck-deleted", (e) => {
-    const { topic, slug } = (e as CustomEvent).detail;
-    const li = document.querySelector(`[data-deck-key="${topic}/${slug}"]`);
+    const { url } = (e as CustomEvent).detail;
+    const li = document.querySelector(`[data-deck-key="${url}"]`);
     const grid = li?.closest<HTMLElement>("[data-topic-grid]");
     li?.remove();
     if (grid && grid.children.length === 0) grid.closest(".topic-group")?.remove();

@@ -112,8 +112,10 @@ const { embeddable = true } = Astro.props;
   const ownedKeys = new Set<string>();
 
   const jwt = () => localStorage.getItem(SESSION_KEY);
-  const keyOf = (t: string, s: string) => `${t}/${s}`;
-  const isOwned = (d: Deck) => ownedKeys.has(keyOf(d.topic, d.slug));
+  // A deck's identity key is its canonical URL — topic/slug pairs can repeat
+  // across owners under per-user spaces; the url never can.
+  const keyOf = (d: { url: string }) => d.url;
+  const isOwned = (d: Deck) => ownedKeys.has(keyOf(d));
 
   // Resolve which decks the viewer owns (for Edit/Delete). Anonymous → none.
   const ownedReady: Promise<void> = (async () => {
@@ -124,7 +126,7 @@ const { embeddable = true } = Astro.props;
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        for (const d of await res.json()) ownedKeys.add(keyOf(d.topic, d.slug));
+        for (const d of await res.json()) ownedKeys.add(keyOf(d));
       }
     } catch {
       /* offline / no session — leave owned set empty */
@@ -154,7 +156,7 @@ const { embeddable = true } = Astro.props;
   function buildCard(deck: Deck): HTMLLIElement {
     const li = document.createElement("li");
     li.className = "deckcard";
-    li.dataset.deckKey = keyOf(deck.topic, deck.slug);
+    li.dataset.deckKey = keyOf(deck);
 
     const thumb = document.createElement("button");
     thumb.className = "deckcard__thumb";
@@ -192,7 +194,7 @@ const { embeddable = true } = Astro.props;
     dates.textContent = datesLine(deck);
     const meta = document.createElement("p");
     meta.className = "deckcard__meta";
-    meta.textContent = `${deck.card_count} card${deck.card_count === 1 ? "" : "s"} · /${deck.topic}/${deck.slug}`;
+    meta.textContent = `${deck.card_count} card${deck.card_count === 1 ? "" : "s"} · ${deck.url}`;
     info.append(title, dates, meta);
     if (deck.visibility && deck.visibility !== "public") {
       const badge = document.createElement("span");
@@ -256,8 +258,9 @@ const { embeddable = true } = Astro.props;
   function embedSnippet(d: Deck): string {
     const origin = window.location.origin;
     const title = (d.title || "Deck").replace(/"/g, "&quot;");
+    // The embed widget mirrors the canonical reader path under /embed.
     return (
-      `<iframe src="${origin}/embed/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}"` +
+      `<iframe src="${origin}/embed${d.url}"` +
       ` width="420" height="560" style="border:0;border-radius:8px;max-width:100%" loading="lazy"` +
       ` title="${title}"></iframe>`
     );
@@ -370,7 +373,7 @@ const { embeddable = true } = Astro.props;
       { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
     );
     if (res.ok || res.status === 404) {
-      const detail = { topic: d.topic, slug: d.slug };
+      const detail = { topic: d.topic, slug: d.slug, url: d.url };
       closeModal();
       document.dispatchEvent(new CustomEvent("vibedeck:deck-deleted", { detail }));
     }

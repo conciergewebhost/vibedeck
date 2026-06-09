@@ -12,12 +12,19 @@
  */
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import DeckModal from "../../../components/DeckModal.astro";
-import { fetchDeck, fetchDeckThemeCss } from "../../../lib/api";
+import { fetchDeck, fetchDeckThemeCss, fetchMeta } from "../../../lib/api";
 
 const { topic, deck } = Astro.params;
 const data = await fetchDeck(topic!, deck!);
 if (!data) {
   return Astro.rewrite("/404");
+}
+
+// Server edition: this is a legacy embed address — published third-party
+// iframes follow the 301 to the namespaced widget.
+const meta = await fetchMeta().catch(() => null);
+if (meta?.user_spaces_enabled && data.url) {
+  return Astro.redirect("/embed" + data.url + Astro.url.search, 301);
 }
 
 // Inline a custom theme server-side so the embed chrome matches the deck.
@@ -26,11 +33,12 @@ const customCss = BUILTIN_THEMES.has(data.theme)
   ? null
   : await fetchDeckThemeCss(topic!, deck!);
 
-const url = `/${topic}/${deck}`;
+// The API's canonical url for this deck (flat in standalone).
+const url = data.url;
 // Open the deck's modal on the public library, in a new tab. The href is
 // relative to this page's v2 origin (the iframe's document), so it lands on
 // v2 even when the widget is embedded on another site.
-const viewUrl = `/decks?deck=${encodeURIComponent(`${topic}/${deck}`)}`;
+const viewUrl = `/decks?deck=${encodeURIComponent(url)}`;
 const deckObj = {
   topic: topic!,
   slug: deck!,

@@ -1,18 +1,25 @@
 ---
 /**
- * Deck card-view page  ->  /{topic}/{deck-slug}
- * The reader: paginated card view with full navigation. Applies the deck's
- * theme. Card content is re-parsed from the canonical file by the backend.
+ * Flat deck card-view page  ->  /{topic}/{deck-slug}
+ * Canonical reader in the standalone edition. In the server edition this is
+ * a legacy address: it 301s to the deck's /u/{handle}/… home (preserving the
+ * query string — embed thumbnails hit it with ?embed=1) when the flat slugs
+ * resolve unambiguously, and 404s otherwise.
  */
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Reader from "../../components/Reader.astro";
-import { fetchDeck, fetchDeckThemeCss } from "../../lib/api";
+import { fetchDeck, fetchDeckThemeCss, fetchMeta } from "../../lib/api";
 
 const { topic, deck } = Astro.params;
 const data = await fetchDeck(topic!, deck!);
 
 if (!data) {
   return Astro.rewrite("/404");
+}
+
+const meta = await fetchMeta().catch(() => null);
+if (meta?.user_spaces_enabled && data.url) {
+  return Astro.redirect(data.url + Astro.url.search, 301);
 }
 
 // ?embed=1 → a chrome-less first-slide view, used as the portal thumbnail.

@@ -10,20 +10,37 @@
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
-import { fetchPublicDecks } from "../lib/api";
+import { fetchMeta, fetchPublicDecks } from "../lib/api";
 
 const decks = (await fetchPublicDecks()) ?? [];
+const meta = await fetchMeta().catch(() => null);
+// Per-user spaces: attribute each topic group to its author (two owners can
+// have same-named topics, so the group key includes the owner).
+const userSpaces = meta?.user_spaces_enabled ?? false;
 
-// Group decks by topic, preserving the API's order (topic name, then title).
-type Group = { slug: string; name: string; decks: typeof decks };
+// Group decks by owner+topic, preserving the API's order.
+type Group = {
+  key: string;
+  slug: string;
+  name: string;
+  owner: string | null;
+  decks: typeof decks;
+};
 const groups: Group[] = [];
-const byTopic = new Map<string, number>();
+const byKey = new Map<string, number>();
 for (const d of decks) {
-  if (!byTopic.has(d.topic)) {
-    byTopic.set(d.topic, groups.length);
-    groups.push({ slug: d.topic, name: d.topic_name, decks: [] });
+  const key = `${d.owner_handle ?? ""}/${d.topic}`;
+  if (!byKey.has(key)) {
+    byKey.set(key, groups.length);
+    groups.push({
+      key,
+      slug: d.topic,
+      name: d.topic_name,
+      owner: d.owner_handle,
+      decks: [],
+    });
   }
-  groups[byTopic.get(d.topic)!].decks.push(d);
+  groups[byKey.get(key)!].decks.push(d);
 }
 
 // `<` escaped so a deck title containing "</script>" can't break out.
@@ -43,8 +60,15 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
       ) : (
         groups.map((g) => (
           <section class="topic-group">
-            <h2 class="topic-group__title">{g.name}</h2>
-            <ul class="deckgrid" data-topic-grid={g.slug} />
+            <h2 class="topic-group__title">
+              {g.name}
+              {userSpaces && g.owner && (
+                <a class="topic-group__owner" href={`/u/${g.owner}`}>
+                  by @{g.owner}
+                </a>
+              )}
+            </h2>
+            <ul class="deckgrid" data-topic-grid={g.key} />
           </section>
         ))
       )
@@ -70,7 +94,7 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
     created_at: string | null;
     updated_at: string | null;
   };
-  type Group = { slug: string; name: string; decks: Deck[] };
+  type Group = { key: string; slug: string; name: string; decks: Deck[] };
 
   const dataEl = document.getElementById("decks-data");
   const groups: Group[] = dataEl ? JSON.parse(dataEl.textContent || "[]") : [];
@@ -78,26 +102,28 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
   whenReady(() => {
     const V = (window as any).Vibedeck;
     for (const g of groups) {
-      const grid = document.querySelector<HTMLUListElement>(`[data-topic-grid="${g.slug}"]`);
+      const grid = document.querySelector<HTMLUListElement>(`[data-topic-grid="${g.key}"]`);
       if (!grid) continue;
       for (const d of g.decks) grid.append(V.buildCard(d));
     }
-    // Deep-link: /decks?deck=<topic>/<slug> opens that deck's modal on load
+    // Deep-link: /decks?deck=<canonical url> opens that deck's modal on load
     // (used by the "View on v2.vibedeck.online" link from an embed widget).
+    // Legacy form <topic>/<slug> (pre-user-spaces embeds) still matches.
     const want = new URLSearchParams(location.search).get("deck");
     if (want) {
-      const target = groups
-        .flatMap((g) => g.decks)
-        .find((d) => `${d.topic}/${d.slug}` === want);
+      const all = groups.flatMap((g) => g.decks);
+      const target =
+        all.find((d) => d.url === want) ??
+        all.find((d) => `${d.topic}/${d.slug}` === want);
       if (target) V.openDeck(target);
     }
   });
 
   // When the owner deletes a deck from the modal, drop its card (and the topic
-  // section if it's now empty).
+  // section if it's now empty). Cards are keyed by canonical url.
   document.addEventListener("vibedeck:deck-deleted", (e) => {
-    const { topic, slug } = (e as CustomEvent).detail;
-    const li = document.querySelector(`[data-deck-key="${topic}/${slug}"]`);
+    const { url } = (e as CustomEvent).detail;
+    const li = document.querySelector(`[data-deck-key="${url}"]`);
     const grid = li?.closest<HTMLElement>("[data-topic-grid]");
     li?.remove();
     if (grid && grid.children.length === 0) grid.closest(".topic-group")?.remove();
@@ -138,5 +164,18 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
     margin: 0 0 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--vd-card-border);
+  }
+  .topic-group__owner {
+    margin-left: 0.75rem;
+    font-size: 0.8em;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--vd-text-muted);
+    text-decoration: none;
+  }
+  .topic-group__owner:hover {
+    color: var(--vd-accent);
+    text-decoration: underline;
   }
 </style>
