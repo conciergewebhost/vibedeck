@@ -34,6 +34,7 @@ from services.auth import get_current_admin, get_current_user
 from services.decks import (
     DeckBlocked,
     DeckConflict,
+    DeckQuotaExceeded,
     DeckTooLarge,
     DeckUnsafe,
 )
@@ -200,6 +201,8 @@ def create_my_deck(
         deck = decks_service.create_user_deck(db, current_user.id, body.markdown)
     except DeckTooLarge as exc:
         raise HTTPException(status_code=413, detail=str(exc))
+    except DeckQuotaExceeded as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except DeckUnsafe as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except DeckBlocked as exc:

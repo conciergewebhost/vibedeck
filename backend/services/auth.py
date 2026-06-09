@@ -105,17 +105,25 @@ def decode_magic_token(token: str) -> tuple[str, bool, str | None]:
     return email, bool(payload.get("signup", False)), handle
 
 
+class AccountDisabled(Exception):
+    """The account exists but is deactivated (banned) — refuse sign-in."""
+
+
 def get_or_create_passwordless_user(db: Session, email: str, handle: str) -> User:
     """Return the user for `email`, creating a passwordless one if needed.
 
-    `handle` is only used when creating: it is re-validated here (uniqueness
-    can change between requesting the link and clicking it) — services.
-    handles.HandleInvalid propagates to the caller. Magic-link accounts have
-    no usable password, but the schema requires a non-null hash, so we store
-    the hash of a random secret no one knows — making password login
-    impossible without a separate column.
+    Raises AccountDisabled when the email belongs to a DEACTIVATED account —
+    a banned user must not be able to re-enter through the signup branch of
+    the magic-link flow. `handle` is only used when creating: it is
+    re-validated here (uniqueness can change between requesting the link and
+    clicking it) — services.handles.HandleInvalid propagates to the caller.
+    Magic-link accounts have no usable password, but the schema requires a
+    non-null hash, so we store the hash of a random secret no one knows —
+    making password login impossible without a separate column.
     """
     user = db.scalar(select(User).where(User.email == email))
+    if user is not None and not user.is_active:
+        raise AccountDisabled()
     if user is None:
         user = User(
             email=email,
@@ -159,19 +167,22 @@ def get_current_user(
     return user
 
 
+def is_admin_user(user: User) -> bool:
+    """Whether a user holds admin rights: the promotable `is_admin` flag OR
+    the configured owner account (config fallback — the owner can never be
+    locked out by a flag). Shared by the admin dependency and exemptions
+    like quotas."""
+    return user.is_admin or user.email == settings.UPLOAD_OWNER_EMAIL
+
+
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     """Resolve the current user and require admin rights, else 403.
 
-    Admin == `User.is_admin` (promotable, owner-managed) OR the configured
-    UPLOAD_OWNER_EMAIL account. The owner qualifies by config fallback — not
-    by the flag — so a misconfigured flag can never lock the owner out. The
-    flag is read fresh from the DB per request, so a demotion takes effect
-    immediately (no JWT claims to invalidate).
+    See is_admin_user for what qualifies. The flag is read fresh from the
+    DB per request, so a demotion takes effect immediately (no JWT claims
+    to invalidate).
     """
-    if not (
-        current_user.is_admin
-        or current_user.email == settings.UPLOAD_OWNER_EMAIL
-    ):
+    if not is_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )

@@ -55,9 +55,8 @@ The original v1 shape; the codebase fits it well. The only friction is that the 
 Already present: accounts, per-user ownership, private themes, admin oversight, invite-gated signup,
 rate limiting, upload size caps.
 
-**Gaps to close:**
-- **Quotas + abuse controls** — per-user deck/storage limits, a report/takedown path, and a user
-  ban/deactivate UI (`User.is_active` exists; no admin control surfaces it yet).
+**Gaps to close:** none — the server-edition checklist is complete. (Still optional/deferred:
+the AI moderation second pass; see `HANDOFF.md`.)
 
 **Already closed:**
 - ~~Per-deck visibility~~ — `public` / `unlisted` / `private` shipped (`Deck.visibility`).
@@ -65,6 +64,12 @@ rate limiting, upload size caps.
   the owner (`UPLOAD_OWNER_EMAIL`) is admin by config fallback (can't be locked out) and is the
   only one who can promote/demote (`get_current_owner`). Admins enter `/admin` with their own
   session (attributable); the shared `UPLOAD_TOKEN` unlock remains as the owner fallback.
+- ~~Quotas + abuse controls~~ — **shipped**: per-user deck/theme caps (`QUOTA_MAX_DECKS`/
+  `QUOTA_MAX_THEMES`, server edition, admins exempt); a reader report path (`POST /api/reports`,
+  rate-limited, deduped per reporter) that auto-quarantines a deck at `REPORT_QUARANTINE_THRESHOLD`
+  distinct reporters into the existing moderation review queue, plus an admin Reports tab; and
+  ban/deactivate (`POST /api/admin/users/{id}/deactivate|reactivate`) — a ban hides all the user's
+  public content at read time and closes the magic-link re-entry holes.
 - ~~Content moderation~~ — the algorithmic layer shipped (hybrid auto-block/flag + admin review
   queue + daily digest; AI second pass still deferred — see `HANDOFF.md`).
 - ~~The namespace rework~~ — **per-user spaces shipped**: users have public handles, topics are
@@ -100,9 +105,10 @@ nothing but the `users.handle` column carries the name.
 
 ## Readiness checklist
 
-**Server-ready, still open:** quotas + abuse controls · the AI moderation second pass.
-(Done: per-deck visibility · algorithmic content moderation · the per-user-spaces namespace
-rework · roles/promotable admins.)
+**Server-ready: COMPLETE.** Per-deck visibility · algorithmic content moderation · the
+per-user-spaces namespace rework · roles/promotable admins · quotas + abuse controls. The one
+optional follow-up is the AI moderation second pass (escalate-only Claude classifier seam in
+`services/moderation.py`).
 
 ---
 

@@ -8,6 +8,7 @@ to the imports below when you create them.
 from models.deck import Deck, deck_keywords
 from models.keyword import Keyword
 from models.moderation_event import ModerationEvent
+from models.report import Report
 from models.theme import Theme
 from models.topic import Topic
 from models.user import User
@@ -19,5 +20,6 @@ __all__ = [
     "Keyword",
     "Theme",
     "ModerationEvent",
+    "Report",
     "deck_keywords",
 ]

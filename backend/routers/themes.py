@@ -14,7 +14,7 @@ from models import User
 from schemas.theme import ThemeInput, ThemeItem
 from services import themes as themes_service
 from services.auth import get_current_user
-from services.themes import ThemeConflict, ThemeInvalid
+from services.themes import ThemeConflict, ThemeInvalid, ThemeQuotaExceeded
 
 router = APIRouter()
 
@@ -41,6 +41,8 @@ def create_theme(
         )
     except ThemeInvalid as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except ThemeQuotaExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ThemeConflict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -69,14 +69,24 @@ def send_magic_link(to: str, link: str, is_signup: bool) -> None:
 
 
 def send_moderation_digest(
-    to: str, queue_size: int, blocked_24h: int, flagged_24h: int
+    to: str,
+    queue_size: int,
+    blocked_24h: int,
+    flagged_24h: int,
+    open_reports: int = 0,
+    reports_24h: int = 0,
 ) -> None:
     """Email the daily moderation digest to the admin.
 
     Sent every day regardless of counts — a steady heartbeat that also
     confirms the digest job itself is alive (see jobs/daily_digest.py).
     """
-    quiet = queue_size == 0 and blocked_24h == 0 and flagged_24h == 0
+    quiet = (
+        queue_size == 0
+        and blocked_24h == 0
+        and flagged_24h == 0
+        and open_reports == 0
+    )
     subject = (
         "Vibedeck moderation: all quiet"
         if quiet
@@ -90,10 +100,14 @@ def send_moderation_digest(
   <table style="border-collapse:collapse;margin:0 0 1.25rem">
     <tr><td style="padding:0.3rem 1rem 0.3rem 0">Flagged decks awaiting review</td>
         <td style="padding:0.3rem 0;font-weight:700">{queue_size}</td></tr>
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">Decks with standing reader reports</td>
+        <td style="padding:0.3rem 0;font-weight:700">{open_reports}</td></tr>
     <tr><td style="padding:0.3rem 1rem 0.3rem 0">Blocked in the last 24&nbsp;h</td>
         <td style="padding:0.3rem 0;font-weight:700">{blocked_24h}</td></tr>
     <tr><td style="padding:0.3rem 1rem 0.3rem 0">Newly flagged in the last 24&nbsp;h</td>
         <td style="padding:0.3rem 0;font-weight:700">{flagged_24h}</td></tr>
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">Reports filed in the last 24&nbsp;h</td>
+        <td style="padding:0.3rem 0;font-weight:700">{reports_24h}</td></tr>
   </table>
   <p style="margin:0 0 1.5rem">
     <a href="{queue_url}"

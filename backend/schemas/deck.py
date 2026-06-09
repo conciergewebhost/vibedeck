@@ -56,6 +56,7 @@ class DeckListItem(BaseModel):
 class DeckDetail(BaseModel):
     """A single deck for the reader: metadata + parsed cards."""
 
+    id: int = 0  # deck row id (0 for sandbox previews); used by /api/reports
     slug: str
     title: str
     author: str
@@ -88,6 +89,7 @@ class PublicDeckItem(BaseModel):
     """A deck for the public library grid (grouped by topic). No owner/path
     info; ownership-gated actions are resolved client-side."""
 
+    id: int = 0  # deck row id; used by /api/reports
     topic: str  # topic slug
     topic_name: str  # topic display name (section header)
     slug: str

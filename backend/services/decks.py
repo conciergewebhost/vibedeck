@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 from config import settings
 from models import Deck, Keyword, ModerationEvent, Topic, User, deck_keywords
 from schemas.deck import AdminDeckItem, Card, DeckDetail, PublicDeckItem
+from services.auth import is_admin_user
 from services.indexing import (
     assert_topic_slug_allowed,
     deck_filename,
@@ -39,6 +40,16 @@ class DeckUnsafe(Exception):
 
 class DeckTooLarge(Exception):
     """The deck markdown exceeds the size limit."""
+
+
+class DeckQuotaExceeded(Exception):
+    """The owner is at their deck-count quota (server edition, non-admins)."""
+
+    def __init__(self, limit: int):
+        super().__init__(
+            f"You've reached the limit of {limit} decks. Delete one to make "
+            "room, or contact the site admin."
+        )
 
 
 class DeckBlocked(Exception):
@@ -211,8 +222,11 @@ def get_deck(
         return None
 
     # Private decks are owner-only; the public reader treats them as missing.
-    # Flagged decks are quarantined the same way until an admin approves.
+    # Flagged decks are quarantined the same way until an admin approves,
+    # and a banned (deactivated) owner's decks hide while the ban stands.
     if deck.visibility == "private" or deck.moderation_status == "flagged":
+        return None
+    if deck.owner is not None and not deck.owner.is_active:
         return None
 
     path = Path(settings.UPLOAD_DIR) / deck.filename
@@ -220,6 +234,7 @@ def get_deck(
     cards = [Card(type=c.type, meta=c.meta, body=c.body) for c in parsed.cards]
 
     return DeckDetail(
+        id=deck.id,
         slug=deck.slug,
         title=deck.title,
         author=deck.author,
@@ -251,8 +266,11 @@ def get_deck_theme_css(
         deck = _resolve_deck(db, topic_slug, deck_slug)
     if deck is None:
         return None
-    # Not publicly viewable (private or quarantined) → no public CSS.
+    # Not publicly viewable (private, quarantined, or banned owner) → no
+    # public CSS.
     if deck.visibility == "private" or deck.moderation_status == "flagged":
+        return None
+    if deck.owner is not None and not deck.owner.is_active:
         return None
     return get_user_theme_css(db, deck.owner_id, deck.theme)
 
@@ -289,6 +307,7 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
 
 def _public_deck_item(d: Deck) -> PublicDeckItem:
     return PublicDeckItem(
+        id=d.id,
         topic=d.topic.slug,
         topic_name=d.topic.display_name,
         slug=d.slug,
@@ -315,7 +334,11 @@ def list_public_decks(db: Session) -> list[PublicDeckItem]:
         .join(Topic, Deck.topic_id == Topic.id)
         .join(User, Deck.owner_id == User.id)
         .options(joinedload(Deck.owner))
-        .where(Deck.visibility == "public", Deck.moderation_status == "approved")
+        .where(
+            Deck.visibility == "public",
+            Deck.moderation_status == "approved",
+            User.is_active,  # banned owners' decks hide while banned
+        )
         .order_by(User.handle, Topic.display_name, Deck.title)
     ).all()
     return [_public_deck_item(d) for d in decks]
@@ -330,6 +353,7 @@ def list_decks_by_handle(db: Session, handle: str) -> list[PublicDeckItem]:
         .options(joinedload(Deck.owner))
         .where(
             User.handle == handle,
+            User.is_active,
             Deck.visibility == "public",
             Deck.moderation_status == "approved",
         )
@@ -495,6 +519,16 @@ def create_user_deck(
         filename = existing.filename
     else:
         owner = db.get(User, owner_id)
+        # Quota applies to NEW decks only (an identity refresh above isn't
+        # growth); server edition, regular users only.
+        if settings.quotas_enabled and not is_admin_user(owner):
+            owned = db.scalar(
+                select(func.count())
+                .select_from(Deck)
+                .where(Deck.owner_id == owner_id)
+            )
+            if owned >= settings.QUOTA_MAX_DECKS:
+                raise DeckQuotaExceeded(settings.QUOTA_MAX_DECKS)
         filename = deck_filename(parsed.meta, owner.handle)
         clash = db.scalar(select(Deck).where(Deck.filename == filename))
         if clash is not None and clash.owner_id != owner_id:

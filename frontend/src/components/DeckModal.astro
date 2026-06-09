@@ -48,10 +48,36 @@ const { embeddable = true } = Astro.props;
       {embeddable && (
         <button class="modal__ghost" type="button" data-modal-embed>Embed</button>
       )}
+      <button class="modal__ghost" type="button" data-modal-report>Report</button>
       <span class="modal__foot-gap"></span>
       <a class="modal__edit" data-modal-edit hidden>Edit</a>
       <button class="modal__del" type="button" data-modal-delete hidden>Delete</button>
     </footer>
+    <div class="modal__embedpanel" data-report-panel hidden>
+      <label class="modal__embed-label" for="vd-report-reason">
+        Report this deck to the site moderators:
+      </label>
+      <div class="modal__report-row">
+        <select class="modal__report-reason" id="vd-report-reason" data-report-reason>
+          <option value="spam">Spam or misleading</option>
+          <option value="harmful">Harmful or abusive</option>
+          <option value="copyright">Copyright violation</option>
+          <option value="other">Something else</option>
+        </select>
+        <input
+          class="modal__report-detail"
+          type="text"
+          data-report-detail
+          maxlength="500"
+          placeholder="Anything the moderators should know (optional)"
+        />
+      </div>
+      <div class="modal__embed-actions">
+        <span class="modal__report-msg" data-report-msg role="status"></span>
+        <button class="modal__ghost" type="button" data-report-send>Send report</button>
+        <button class="modal__ghost" type="button" data-report-close>Cancel</button>
+      </div>
+    </div>
     {embeddable && (
       <div class="modal__embedpanel" data-embed-panel hidden>
         <label class="modal__embed-label" for="vd-embed-code">
@@ -78,6 +104,7 @@ const { embeddable = true } = Astro.props;
   const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
   type Deck = {
+    id?: number; // deck row id — used by /api/reports
     topic: string;
     slug: string;
     title: string;
@@ -236,10 +263,14 @@ const { embeddable = true } = Astro.props;
     const foot = $<HTMLElement>("[data-modal-foot]");
     const edit = $<HTMLAnchorElement>("[data-modal-edit]");
     const del = $<HTMLButtonElement>("[data-modal-delete]");
+    const report = $<HTMLButtonElement>("[data-modal-report]");
     const hasEmbed = !!$("[data-modal-embed]"); // present unless embeddable={false}
     const reveal = (owned: boolean) => {
-      // Footer shows if there's an Embed button (any viewer) or owner actions.
-      if (foot) foot.hidden = !(hasEmbed || owned);
+      // Footer always has something now: Report (any non-owner viewer),
+      // Embed (any viewer, when embeddable), or owner actions.
+      if (foot) foot.hidden = false;
+      // No reporting your own deck; reports also need a deck row id.
+      if (report) report.hidden = owned || !deck.id;
       if (edit) {
         edit.hidden = !owned;
         if (owned)
@@ -249,10 +280,58 @@ const { embeddable = true } = Astro.props;
       }
       if (del) del.hidden = !owned;
     };
-    reveal(false); // Embed shows immediately; Edit/Delete only once owned.
+    reveal(false); // Embed/Report show immediately; Edit/Delete once owned.
     ownedReady.then(() => {
       if (activeDeck === deck) reveal(isOwned(deck));
     });
+  }
+
+  // ── Report panel ────────────────────────────────────────────────────────
+  function openReportPanel() {
+    hideEmbedPanel();
+    const panel = $<HTMLElement>("[data-report-panel]");
+    const msg = $<HTMLElement>("[data-report-msg]");
+    const send = $<HTMLButtonElement>("[data-report-send]");
+    if (!panel) return;
+    if (msg) msg.textContent = "";
+    if (send) send.disabled = false;
+    panel.hidden = false;
+  }
+
+  function hideReportPanel() {
+    $<HTMLElement>("[data-report-panel]")?.setAttribute("hidden", "");
+  }
+
+  async function sendReport() {
+    const d = activeDeck;
+    const reason = $<HTMLSelectElement>("[data-report-reason]")?.value ?? "other";
+    const detail = $<HTMLInputElement>("[data-report-detail]")?.value.trim() ?? "";
+    const msg = $<HTMLElement>("[data-report-msg]");
+    const send = $<HTMLButtonElement>("[data-report-send]");
+    if (!d || !d.id) return;
+    if (send) send.disabled = true;
+    try {
+      // Signed-in reporters are attributed; anonymous is fine too.
+      const token = jwt();
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ deck_id: d.id, reason, detail: detail || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (msg) {
+        msg.textContent = res.ok
+          ? (data.message ?? "Thanks — our moderators will take a look.")
+          : (data.detail ?? "Couldn't send the report. Please try again.");
+      }
+      if (!res.ok && send) send.disabled = false;
+    } catch {
+      if (msg) msg.textContent = "Network error. Please try again.";
+      if (send) send.disabled = false;
+    }
   }
 
   function embedSnippet(d: Deck): string {
@@ -267,6 +346,7 @@ const { embeddable = true } = Astro.props;
   }
 
   function openEmbedPanel() {
+    hideReportPanel();
     const d = activeDeck;
     const panel = $<HTMLElement>("[data-embed-panel]");
     const code = $<HTMLTextAreaElement>("[data-embed-code]");
@@ -309,6 +389,7 @@ const { embeddable = true } = Astro.props;
     if (!modal || !frame) return;
     if (titleEl) titleEl.textContent = deck.title;
     hideEmbedPanel();
+    hideReportPanel();
     applyOwnerActions(deck);
     // Embedding a private deck wouldn't work (it 404s anonymously), so hide it.
     const embedBtn = $<HTMLElement>("[data-modal-embed]");
@@ -355,6 +436,7 @@ const { embeddable = true } = Astro.props;
     modal.setAttribute("hidden", "");
     setFullscreen(false);
     hideEmbedPanel();
+    hideReportPanel();
     if (frame) {
       frame.onload = null;
       frame.src = "about:blank";
@@ -386,6 +468,9 @@ const { embeddable = true } = Astro.props;
     $("[data-modal-embed]")?.addEventListener("click", openEmbedPanel);
     $("[data-embed-copy]")?.addEventListener("click", copyEmbed);
     $("[data-embed-close]")?.addEventListener("click", hideEmbedPanel);
+    $("[data-modal-report]")?.addEventListener("click", openReportPanel);
+    $("[data-report-send]")?.addEventListener("click", sendReport);
+    $("[data-report-close]")?.addEventListener("click", hideReportPanel);
     $("[data-modal]")?.addEventListener("click", (e) => {
       if (e.target === e.currentTarget) closeModal();
     });
@@ -689,5 +774,32 @@ const { embeddable = true } = Astro.props;
   .modal__embed-actions {
     display: flex;
     gap: 0.5rem;
+  }
+
+  /* Report panel (shares the embed panel container styles) */
+  .modal__report-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .modal__report-reason,
+  .modal__report-detail {
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+  }
+  .modal__report-detail {
+    flex: 1;
+    min-width: 12rem;
+  }
+  .modal__report-msg {
+    flex: 1;
+    align-self: center;
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
   }
 </style>

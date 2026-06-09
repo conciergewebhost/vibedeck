@@ -10,10 +10,12 @@ to the owner's own view (themes are never served to anyone else).
 
 import re
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import Theme
+from config import settings
+from models import Theme, User
+from services.auth import is_admin_user
 from services.indexing import slugify
 
 # Hard ceiling so a theme can't be used to bloat the DB / a page.
@@ -50,6 +52,16 @@ class ThemeNotFound(Exception):
     """No such theme for this owner."""
 
 
+class ThemeQuotaExceeded(Exception):
+    """The owner is at their theme-count quota (server edition, non-admins)."""
+
+    def __init__(self, limit: int):
+        super().__init__(
+            f"You've reached the limit of {limit} themes. Delete one to make "
+            "room, or contact the site admin."
+        )
+
+
 def validate_theme_css(css: str) -> None:
     """Raise ThemeInvalid unless `css` is safe theme CSS.
 
@@ -77,7 +89,8 @@ def validate_theme_css(css: str) -> None:
 def create_user_theme(db: Session, owner_id: int, name: str, css: str) -> Theme:
     """Validate and store a new theme for `owner_id`. Caller commits.
 
-    Raises ThemeInvalid on bad CSS and ThemeConflict if the slug is taken.
+    Raises ThemeInvalid on bad CSS, ThemeConflict if the slug is taken, and
+    ThemeQuotaExceeded at the per-user cap (server edition, non-admins).
     """
     name = name.strip()
     if not name:
@@ -93,6 +106,14 @@ def create_user_theme(db: Session, owner_id: int, name: str, css: str) -> Theme:
     )
     if existing is not None:
         raise ThemeConflict()
+
+    owner = db.get(User, owner_id)
+    if settings.quotas_enabled and owner is not None and not is_admin_user(owner):
+        owned = db.scalar(
+            select(func.count()).select_from(Theme).where(Theme.owner_id == owner_id)
+        )
+        if owned >= settings.QUOTA_MAX_THEMES:
+            raise ThemeQuotaExceeded(settings.QUOTA_MAX_THEMES)
 
     theme = Theme(owner_id=owner_id, name=name, slug=slug, css=css)
     db.add(theme)

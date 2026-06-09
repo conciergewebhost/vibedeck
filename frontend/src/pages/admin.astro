@@ -47,6 +47,9 @@ import DeckModal from "../components/DeckModal.astro";
         <button class="admin__tab" type="button" data-tab="flagged" aria-pressed="false">
           Flagged<span class="admin__badge" data-flagged-count hidden></span>
         </button>
+        <button class="admin__tab" type="button" data-tab="reports" aria-pressed="false">
+          Reports<span class="admin__badge" data-reports-count hidden></span>
+        </button>
       </nav>
 
       <!-- Users tab -->
@@ -105,6 +108,16 @@ import DeckModal from "../components/DeckModal.astro";
         </p>
         <ul class="admin__decks" data-flagged-list></ul>
       </div>
+
+      <!-- Reports tab: reader reports grouped per deck -->
+      <div data-view="reports" hidden>
+        <p class="admin__msg">
+          Reader reports, grouped per deck. A deck reported by several distinct
+          readers quarantines automatically (it appears under Flagged). Dismiss
+          clears the reports and leaves the deck as-is.
+        </p>
+        <ul class="admin__decks" data-reports-list></ul>
+      </div>
     </section>
   </main>
 
@@ -140,6 +153,18 @@ import DeckModal from "../components/DeckModal.astro";
     last_deck_at: string | null;
     is_admin: boolean;
     is_owner: boolean;
+    is_active: boolean;
+  };
+  type ReportedDeck = {
+    deck_id: number;
+    title: string;
+    url: string;
+    owner_email: string | null;
+    moderation_status: string;
+    report_count: number;
+    reasons: Record<string, number>;
+    details: string[];
+    latest_at: string;
   };
 
   const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
@@ -151,6 +176,8 @@ import DeckModal from "../components/DeckModal.astro";
   // Role management (promote/demote) is owner-only; admins see the Users
   // tab without the role buttons.
   let viewerIsOwner = false;
+  // The viewer's own user id (session path) — hides self-targeting buttons.
+  let viewerId: number | null = null;
 
   function authHeaders(): Record<string, string> {
     return activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
@@ -217,6 +244,7 @@ import DeckModal from "../components/DeckModal.astro";
       if (!me.is_admin && !me.is_owner) return false;
       activeToken = session;
       viewerIsOwner = Boolean(me.is_owner);
+      viewerId = me.id ?? null;
       return true;
     } catch {
       return false;
@@ -339,12 +367,14 @@ import DeckModal from "../components/DeckModal.astro";
       const tr = document.createElement("tr");
       const cells = [
         u.email,
-        u.is_owner ? "owner" : u.is_admin ? "admin" : "—",
+        (u.is_owner ? "owner" : u.is_admin ? "admin" : "—") +
+          (u.is_active ? "" : " · banned"),
         String(u.deck_count),
         fmtDate(u.created_at),
         fmtDate(u.last_login_at),
         fmtDate(u.last_deck_at),
       ];
+      if (!u.is_active) tr.classList.add("admin__row--banned");
       for (const text of cells) {
         const td = document.createElement("td");
         td.textContent = text;
@@ -368,9 +398,39 @@ import DeckModal from "../components/DeckModal.astro";
         role.addEventListener("click", () => setRole(u, !u.is_admin));
         tdAction.append(role);
       }
+      // Ban: admins may ban regular users; only the owner may touch admins;
+      // never the owner row or yourself (mirrors the backend matrix).
+      const canBan =
+        !u.is_owner && u.id !== viewerId && (viewerIsOwner || !u.is_admin);
+      if (canBan) {
+        const ban = document.createElement("button");
+        ban.className = u.is_active ? "admin__del" : "admin__ghost";
+        ban.type = "button";
+        ban.textContent = u.is_active ? "Ban" : "Reactivate";
+        ban.addEventListener("click", () => setActive(u, !u.is_active));
+        tdAction.append(ban);
+      }
       tr.append(tdAction);
       body.append(tr);
     }
+  }
+
+  async function setActive(u: AdminUser, makeActive: boolean) {
+    const action = makeActive ? "reactivate" : "deactivate";
+    if (
+      !makeActive &&
+      !confirm(
+        `Ban ${u.email}? They can't sign in and ALL their public decks hide ` +
+          `until reactivated (nothing is deleted).`,
+      )
+    )
+      return;
+    const res = await fetch(`/api/admin/users/${u.id}/${action}`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (res.status === 401) return signOut();
+    if (res.ok) loadUsers();
   }
 
   async function setRole(u: AdminUser, makeAdmin: boolean) {
@@ -436,11 +496,16 @@ import DeckModal from "../components/DeckModal.astro";
   async function refreshFlaggedCount() {
     const res = await fetch("/api/admin/moderation-summary", { headers: authHeaders() });
     if (!res.ok) return;
-    const { queue_size } = await res.json();
+    const { queue_size, open_reports } = await res.json();
     const badge = $<HTMLElement>("[data-flagged-count]");
     if (badge) {
       badge.textContent = String(queue_size);
       badge.hidden = queue_size === 0;
+    }
+    const reports = $<HTMLElement>("[data-reports-count]");
+    if (reports) {
+      reports.textContent = String(open_reports ?? 0);
+      reports.hidden = !open_reports;
     }
   }
 
@@ -537,6 +602,87 @@ import DeckModal from "../components/DeckModal.astro";
     }
   }
 
+  // ── Reports tab (reader reports grouped per deck) ──────────
+  async function loadReports() {
+    const res = await fetch("/api/admin/reports", { headers: authHeaders() });
+    if (res.status === 401) return signOut();
+    const items: ReportedDeck[] = await res.json();
+    renderReports(items);
+    refreshFlaggedCount();
+  }
+
+  function renderReports(items: ReportedDeck[]) {
+    const list = $<HTMLUListElement>("[data-reports-list]");
+    if (!list) return;
+    list.replaceChildren();
+    if (items.length === 0) {
+      const li = document.createElement("li");
+      li.className = "admin__empty";
+      li.textContent = "No standing reports. 🎉";
+      list.append(li);
+      return;
+    }
+    for (const r of items) {
+      const li = document.createElement("li");
+      li.className = "admin__deck admin__deck--flagged";
+
+      const title = document.createElement("span");
+      title.className = "admin__deck-title";
+      title.textContent = r.title;
+
+      const meta = document.createElement("span");
+      meta.className = "admin__deck-meta";
+      const status = r.moderation_status === "flagged" ? " · quarantined" : "";
+      meta.textContent = `${r.owner_email ?? "?"} · ${r.url}${status} · last report ${fmtDate(r.latest_at)}`;
+
+      const reasons = document.createElement("span");
+      reasons.className = "admin__deck-reasons";
+      const breakdown = Object.entries(r.reasons)
+        .map(([k, v]) => `${k} ×${v}`)
+        .join(" · ");
+      const details = r.details.length ? `\n“${r.details.join("” · “")}”` : "";
+      reasons.textContent = `${r.report_count} reporter${r.report_count === 1 ? "" : "s"}: ${breakdown}${details}`;
+
+      const info = document.createElement("div");
+      info.className = "admin__deck-info";
+      info.append(title, meta, reasons);
+
+      const dismiss = document.createElement("button");
+      dismiss.className = "admin__ghost";
+      dismiss.type = "button";
+      dismiss.textContent = "Dismiss reports";
+      dismiss.addEventListener("click", async () => {
+        const res = await fetch(`/api/admin/decks/${r.deck_id}/reports`, {
+          method: "DELETE",
+          headers: authHeaders(),
+        });
+        if (res.status === 401) return signOut();
+        if (res.ok || res.status === 404) loadReports();
+      });
+
+      const del = document.createElement("button");
+      del.className = "admin__del";
+      del.type = "button";
+      del.textContent = "Delete deck";
+      del.addEventListener("click", async () => {
+        if (!confirm(`Delete "${r.title}"? This removes the deck and its file.`)) return;
+        const res = await fetch(`/api/admin/decks/${r.deck_id}`, {
+          method: "DELETE",
+          headers: authHeaders(),
+        });
+        if (res.status === 401) return signOut();
+        if (res.ok || res.status === 404) loadReports();
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "admin__deck-actions";
+      actions.append(dismiss, del);
+
+      li.append(info, actions);
+      list.append(li);
+    }
+  }
+
   // ── Init ───────────────────────────────────────────────────
   function enter() {
     showPanel();
@@ -564,6 +710,7 @@ import DeckModal from "../components/DeckModal.astro";
         selectTab(tab.dataset.tab as string);
         if (tab.dataset.tab === "decks") loadDecks();
         if (tab.dataset.tab === "flagged") loadFlagged();
+        if (tab.dataset.tab === "reports") loadReports();
       });
     }
     $("[data-back-users]")?.addEventListener("click", backToUsers);
@@ -794,6 +941,9 @@ import DeckModal from "../components/DeckModal.astro";
   }
   .admin__deck--flagged {
     align-items: flex-start;
+  }
+  .admin__row--banned td {
+    opacity: 0.55;
   }
   .admin__deck-reasons {
     font-size: 0.8rem;

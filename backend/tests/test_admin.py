@@ -164,6 +164,7 @@ class TestListUsers(_Base):
                 "last_deck_at",
                 "is_admin",
                 "is_owner",
+                "is_active",
             },
         )
         # The owner row reports admin/owner via config, not the flag.

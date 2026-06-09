@@ -76,6 +76,18 @@ class Settings(BaseSettings):
     # Blank → falls back to the owner/admin account email.
     ADMIN_DIGEST_EMAIL: str = ""
 
+    # Per-user creation caps (server edition only; admins and the owner are
+    # exempt). Deck files are individually capped at 256 KB, so the deck
+    # count also bounds per-user storage (50 × 256 KB ≈ 13 MB).
+    QUOTA_MAX_DECKS: int = 50
+    QUOTA_MAX_THEMES: int = 20
+
+    # Reader reports: a deck reported by this many DISTINCT reporters is
+    # auto-quarantined (hidden, into the admin review queue) until a human
+    # rules. Reports are rate-limited per client IP.
+    REPORT_QUARANTINE_THRESHOLD: int = 3
+    RATE_LIMIT_REPORTS_PER_HOUR: int = 5
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"

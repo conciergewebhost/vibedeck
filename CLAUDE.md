@@ -118,6 +118,8 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 | `UPLOAD_TOKEN` | Shared token for the `/admin` web upload surface — `openssl rand -hex 32` |
 | `UPLOAD_OWNER_EMAIL` | Account that token-gated and CLI uploads are attributed to |
 | `ADMIN_DIGEST_EMAIL` | Recipient of the daily moderation digest (optional — defaults to `UPLOAD_OWNER_EMAIL`) |
+| `QUOTA_MAX_DECKS` / `QUOTA_MAX_THEMES` | Per-user creation caps, server edition only (optional — default 50 / 20; admins exempt) |
+| `REPORT_QUARANTINE_THRESHOLD` | Distinct reader reports that auto-quarantine a deck (optional — default 3) |
 
 ---
 

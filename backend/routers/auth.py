@@ -22,6 +22,7 @@ from schemas.auth import (
     VerifyInput,
 )
 from services.auth import (
+    AccountDisabled,
     authenticate_user,
     create_access_token,
     create_magic_token,
@@ -122,6 +123,14 @@ def request_link(
     email = body.email.lower()
     user = db.scalar(select(User).where(User.email == email))
 
+    # A deactivated (banned) account must not fall through to the signup
+    # branch — that would mint a fresh magic link for a banned email.
+    if user is not None and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is disabled.",
+        )
+
     handle: str | None = None  # only signups carry one
     if user is not None and user.is_active:
         is_signup = False
@@ -198,6 +207,13 @@ def verify(body: VerifyInput, db: Session = Depends(get_db)) -> Token:
     if is_signup:
         try:
             user = get_or_create_passwordless_user(db, email, handle or "")
+        except AccountDisabled:
+            # A banned email replaying an old signup link. Same generic
+            # message as any dead link — no oracle for banned status here.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This link is invalid or has expired.",
+            )
         except HandleInvalid as exc:
             # The handle was taken between requesting the link and clicking
             # it (or a stale/replayed link carries a bad one).

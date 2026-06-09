@@ -20,9 +20,13 @@ _TOP_KEYWORDS = 5
 
 def _is_listable(deck) -> bool:
     """Whether a deck belongs in public listings: public visibility only
-    (unlisted stays reachable by direct link but unlisted), and not
-    quarantined by moderation."""
-    return deck.visibility == "public" and deck.moderation_status == "approved"
+    (unlisted stays reachable by direct link but unlisted), not quarantined
+    by moderation, and not owned by a banned (deactivated) account."""
+    return (
+        deck.visibility == "public"
+        and deck.moderation_status == "approved"
+        and (deck.owner is None or deck.owner.is_active)
+    )
 
 
 def _deck_list_item(deck) -> DeckListItem:
@@ -40,6 +44,8 @@ def _deck_list_item(deck) -> DeckListItem:
 
 def _summarize(topic: Topic) -> TopicSummary | None:
     """A TopicSummary for the index, or None if nothing in it is listable."""
+    if topic.owner is not None and not topic.owner.is_active:
+        return None  # banned owner → whole topic hides
     visible = [d for d in topic.decks if _is_listable(d)]
     if not visible:  # topics with no listable decks stay off the index
         return None
@@ -105,7 +111,7 @@ def get_topic_for_owner(db: Session, handle: str, slug: str) -> TopicDetail | No
     topic = db.scalar(
         select(Topic)
         .join(User, Topic.owner_id == User.id)
-        .where(User.handle == handle, Topic.slug == slug)
+        .where(User.handle == handle, User.is_active, Topic.slug == slug)
     )
     if topic is None:
         return None
@@ -117,7 +123,7 @@ def list_topics_for_owner(db: Session, handle: str) -> list[TopicSummary]:
     topics = db.scalars(
         select(Topic)
         .join(User, Topic.owner_id == User.id)
-        .where(User.handle == handle)
+        .where(User.handle == handle, User.is_active)
         .order_by(Topic.display_name)
     ).all()
     return [s for t in topics if (s := _summarize(t)) is not None]

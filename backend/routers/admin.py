@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas.admin import AdminUserItem, ModerationSummary
+from schemas.admin import AdminUserItem, ModerationSummary, ReportedDeckItem
 from schemas.deck import AdminDeckItem
 from services import admin as admin_service
 from services import decks as decks_service
+from services import reports as reports_service
 from services.admin import RoleChangeForbidden
 from services.auth import get_current_admin, get_current_owner
 
@@ -36,6 +37,41 @@ def list_user_decks(
 ) -> list[AdminDeckItem]:
     """Decks owned by a given user — for the admin per-user view."""
     return decks_service.list_user_decks(db, user_id)
+
+
+# Ban / reactivate: admins may ban regular users; only the owner may ban
+# (or reactivate) admins; the owner and one's own account are untouchable.
+
+
+@router.post("/users/{user_id}/deactivate", status_code=status.HTTP_204_NO_CONTENT)
+def deactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> Response:
+    """Ban a user: login refused and all their public content hidden
+    (read-time filter — nothing is deleted; reactivation restores it)."""
+    return _set_active(db, admin, user_id, False)
+
+
+@router.post("/users/{user_id}/reactivate", status_code=status.HTTP_204_NO_CONTENT)
+def reactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> Response:
+    """Lift a ban — the user's content reappears immediately."""
+    return _set_active(db, admin, user_id, True)
+
+
+def _set_active(db: Session, actor: User, user_id: int, value: bool) -> Response:
+    try:
+        if not admin_service.set_active(db, actor, user_id, value):
+            raise HTTPException(status_code=404, detail="User not found")
+    except admin_service.BanForbidden as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # Role management is OWNER-only: admins must not be able to mint or remove
@@ -98,10 +134,34 @@ def approve_deck(
 ) -> Response:
     """Approve a flagged deck — it becomes visible per its visibility setting.
 
-    Rejecting a deck is DELETE /api/admin/decks/{deck_id}.
+    Also clears any standing reader reports: a human ruling supersedes the
+    complaints (else the standing count would re-quarantine on the next
+    report). Rejecting a deck is DELETE /api/admin/decks/{deck_id}.
     """
     if not decks_service.approve_deck_by_id(db, deck_id):
         raise HTTPException(status_code=404, detail="Deck not found")
+    reports_service.clear_reports(db, deck_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/reports", response_model=list[ReportedDeckItem])
+def list_reports(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> list[ReportedDeckItem]:
+    """Reader reports grouped per deck, most recently reported first."""
+    return admin_service.list_reported_decks(db)
+
+
+@router.delete("/decks/{deck_id}/reports", status_code=status.HTTP_204_NO_CONTENT)
+def dismiss_reports(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> Response:
+    """Dismiss all standing reports against a deck (the content stays as-is)."""
+    reports_service.clear_reports(db, deck_id)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
