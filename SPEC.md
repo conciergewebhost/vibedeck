@@ -33,14 +33,22 @@ Vibedeck is the open source project. `vibedeck.online` is the proof-of-concept d
 
 ### URL Structure
 
-| URL | Description |
-|-----|-------------|
-| `vibedeck.online` | Master index — all topics, grouped |
-| `vibedeck.online/{topic}` | All decks within a topic |
-| `vibedeck.online/{topic}/{deck-slug}` | Individual deck, paginated card view |
-| `vibedeck.online/{topic}?kw={keyword}` | Keyword-filtered deck list (v2) |
+URLs are **edition-shaped** (see `docs/EDITIONS.md`): the standalone edition uses flat paths;
+the server edition namespaces all content under its author's handle (per-user spaces), with
+301 redirects from the flat form while it is unambiguous.
 
-Topic slugs are lowercase and hyphen-separated, derived directly from the `topic` frontmatter field.
+| URL (standalone / server) | Description |
+|-----|-------------|
+| `/` | Landing page (per-deployment) |
+| `/decks` | Library — all public decks, grouped by topic (with author attribution on server) |
+| `/{topic}` · `/u/{handle}/{topic}` | All decks within a topic |
+| `/{topic}/{deck-slug}` · `/u/{handle}/{topic}/{deck-slug}` | Individual deck, paginated card view |
+| `/u/{handle}` | Author page — a user's public decks (server edition) |
+| `/embed/...` | Embeddable widget, mirroring the reader path |
+| `/{topic}?kw={keyword}` | Keyword-filtered deck list (planned) |
+
+Topic slugs are lowercase and hyphen-separated, derived directly from the `topic` frontmatter
+field; handles are chosen at signup (lowercase, slug-safe, reserved words blocked).
 
 ---
 
@@ -268,6 +276,11 @@ Unlisted and private decks are served with `noindex` (and private decks 404 publ
 - [ ] Content moderation, AI second pass — a Claude classifier layered onto the heuristics
       (escalate-only; needs `ANTHROPIC_API_KEY`; run async). Seam: `TODO(v2+)` in
       `backend/services/moderation.py`.
+- [x] **Roles** — promotable admins (`is_admin`; owner-only promote/demote; session-first `/admin`)
+- [x] **Quotas + abuse controls** — per-user deck/theme caps, reader reports with
+      auto-quarantine at a distinct-reporter threshold, ban/deactivate with read-time content hiding
+- [x] **Admin-managed signup gate** — invite code on/off + change code at runtime
+      (`site_settings` store; owner-only Settings tab)
 - [ ] Keyword filtering UI on deck index
 - [ ] Search across decks
 - [ ] Transition effects between cards
