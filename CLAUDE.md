@@ -120,6 +120,7 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 | `ADMIN_DIGEST_EMAIL` | Recipient of the daily moderation digest (optional — defaults to `UPLOAD_OWNER_EMAIL`) |
 | `QUOTA_MAX_DECKS` / `QUOTA_MAX_THEMES` | Per-user creation caps, server edition only (optional — default 50 / 20; admins exempt) |
 | `REPORT_QUARANTINE_THRESHOLD` | Distinct reader reports that auto-quarantine a deck (optional — default 3) |
+| `NEW_USER_CODE` | Seed/fallback invite code — runtime on/off + code changes live in the admin Settings tab (`site_settings` table) |
 
 ---
 

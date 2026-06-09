@@ -99,6 +99,7 @@ export interface SiteMeta {
   visibility_enabled: boolean;
   quotas_enabled: boolean;
   user_spaces_enabled: boolean;
+  signup_code_required: boolean;
 }
 
 /** Non-secret deployment flags (edition + feature toggles) for UI adaptation. */

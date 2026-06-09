@@ -30,8 +30,9 @@ from services.auth import (
     get_or_create_passwordless_user,
     record_login,
 )
-from services.handles import HandleInvalid, validate_handle
+from services import site_settings
 from services.email import send_magic_link
+from services.handles import HandleInvalid, validate_handle
 from services.ratelimit import SlidingWindowLimiter, client_ip
 
 router = APIRouter()
@@ -135,29 +136,32 @@ def request_link(
     if user is not None and user.is_active:
         is_signup = False
     else:
-        # Unknown (or inactive) email → treat as signup, gated by the code.
-        # Standalone is single-user: there is no public sign-up at all.
+        # Unknown email → treat as signup. Standalone is single-user: there
+        # is no public sign-up at all.
         if not settings.allow_public_signup:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="New account sign-up is disabled on this instance.",
             )
-        expected = settings.NEW_USER_CODE.encode("utf-8")
-        submitted = (body.code or "").encode("utf-8")
-        if not hmac.compare_digest(submitted, expected):
-            # Tighter, dedicated cap on invite-code guessing per IP.
-            ok, code_retry = _bad_code_limiter.hit(
-                ip, settings.RATE_LIMIT_BAD_CODE_PER_HOUR, _WINDOW_SECONDS
-            )
-            if not ok:
-                raise _too_many(
-                    code_retry,
-                    "Too many invalid invite-code attempts. Please try again later.",
+        # The invite gate is runtime-managed (admin Settings tab): it can be
+        # switched off entirely, and the code can differ from NEW_USER_CODE.
+        if site_settings.invite_code_required(db):
+            expected = site_settings.invite_code(db).encode("utf-8")
+            submitted = (body.code or "").encode("utf-8")
+            if not hmac.compare_digest(submitted, expected):
+                # Tighter, dedicated cap on invite-code guessing per IP.
+                ok, code_retry = _bad_code_limiter.hit(
+                    ip, settings.RATE_LIMIT_BAD_CODE_PER_HOUR, _WINDOW_SECONDS
                 )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="A valid invite code is required to create an account.",
-            )
+                if not ok:
+                    raise _too_many(
+                        code_retry,
+                        "Too many invalid invite-code attempts. Please try again later.",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="A valid invite code is required to create an account.",
+                )
         # Signups choose their public handle up front; validate before
         # sending the email so the user gets immediate feedback. It is
         # re-validated at /verify (uniqueness can change in between).

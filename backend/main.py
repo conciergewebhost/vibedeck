@@ -7,11 +7,14 @@ Routers are mounted under /api so Caddy can split frontend (Astro SSR)
 from backend traffic by path prefix. See Caddyfile.example.
 """
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from config import settings
+from database import get_db
 from routers import admin, auth, decks, reports, themes, topics, users
+from services import site_settings
 
 app = FastAPI(
     title="Vibedeck API",
@@ -55,11 +58,13 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/meta", tags=["meta"])
-def meta() -> dict[str, object]:
+def meta(db: Session = Depends(get_db)) -> dict[str, object]:
     """Non-secret deployment flags the frontend reads to adapt its UI.
 
     Lets Astro pages show/hide affordances (e.g. the sign-up surface) per
     edition without a rebuild. Safe to expose publicly — booleans only.
+    `signup_code_required` is runtime-managed (admin Settings tab), so the
+    login page can drop the invite-code field when the gate is open.
     """
     return {
         "edition": settings.EDITION.value,
@@ -69,4 +74,5 @@ def meta() -> dict[str, object]:
         "visibility_enabled": settings.visibility_enabled,
         "quotas_enabled": settings.quotas_enabled,
         "user_spaces_enabled": settings.user_spaces_enabled,
+        "signup_code_required": site_settings.invite_code_required(db),
     }

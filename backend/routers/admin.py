@@ -9,11 +9,18 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas.admin import AdminUserItem, ModerationSummary, ReportedDeckItem
+from schemas.admin import (
+    AdminUserItem,
+    ModerationSummary,
+    ReportedDeckItem,
+    SignupSettings,
+    SignupSettingsInput,
+)
 from schemas.deck import AdminDeckItem
 from services import admin as admin_service
 from services import decks as decks_service
 from services import reports as reports_service
+from services import site_settings
 from services.admin import RoleChangeForbidden
 from services.auth import get_current_admin, get_current_owner
 
@@ -190,6 +197,50 @@ def delete_deck(
         raise HTTPException(status_code=404, detail="Deck not found")
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# The signup gate is owner-only, like role management: it's instance policy.
+
+
+@router.get("/signup-settings", response_model=SignupSettings)
+def get_signup_settings(
+    db: Session = Depends(get_db),
+    owner: User = Depends(get_current_owner),
+) -> SignupSettings:
+    """Current signup-gate state, including the effective invite code."""
+    return SignupSettings(
+        require_code=site_settings.invite_code_required(db),
+        code=site_settings.invite_code(db),
+    )
+
+
+@router.put("/signup-settings", response_model=SignupSettings)
+def update_signup_settings(
+    body: SignupSettingsInput,
+    db: Session = Depends(get_db),
+    owner: User = Depends(get_current_owner),
+) -> SignupSettings:
+    """Toggle whether signups need an invite code and/or change the code.
+
+    Takes effect immediately (no restart — the auth flow reads the runtime
+    store per request). A blank `code` leaves the current code unchanged.
+    """
+    code = (body.code or "").strip()
+    if code and len(code) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="The invite code must be at least 4 characters.",
+        )
+    site_settings.set_setting(
+        db, site_settings.REQUIRE_INVITE_CODE, "true" if body.require_code else "false"
+    )
+    if code:
+        site_settings.set_setting(db, site_settings.INVITE_CODE, code)
+    db.commit()
+    return SignupSettings(
+        require_code=site_settings.invite_code_required(db),
+        code=site_settings.invite_code(db),
+    )
 
 
 @router.get("/moderation-summary", response_model=ModerationSummary)

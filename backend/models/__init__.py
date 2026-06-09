@@ -9,6 +9,7 @@ from models.deck import Deck, deck_keywords
 from models.keyword import Keyword
 from models.moderation_event import ModerationEvent
 from models.report import Report
+from models.site_settings import SiteSetting
 from models.theme import Theme
 from models.topic import Topic
 from models.user import User
@@ -21,5 +22,6 @@ __all__ = [
     "Theme",
     "ModerationEvent",
     "Report",
+    "SiteSetting",
     "deck_keywords",
 ]

@@ -50,6 +50,10 @@ import DeckModal from "../components/DeckModal.astro";
         <button class="admin__tab" type="button" data-tab="reports" aria-pressed="false">
           Reports<span class="admin__badge" data-reports-count hidden></span>
         </button>
+        <!-- Owner-only (revealed in enter(); backend 403s defend regardless). -->
+        <button class="admin__tab" type="button" data-tab="settings" data-settings-tab aria-pressed="false" hidden>
+          Settings
+        </button>
       </nav>
 
       <!-- Users tab -->
@@ -107,6 +111,28 @@ import DeckModal from "../components/DeckModal.astro";
           Approve to publish, Delete to reject.
         </p>
         <ul class="admin__decks" data-flagged-list></ul>
+      </div>
+
+      <!-- Settings tab: instance policy, owner-only -->
+      <div data-view="settings" hidden>
+        <h2 class="admin__subhead">Sign-ups</h2>
+        <label class="admin__check">
+          <input type="checkbox" data-settings-require />
+          Require an invite code for new sign-ups
+        </label>
+        <label class="admin__label" for="signup-code">Invite code</label>
+        <div class="admin__row">
+          <input
+            class="admin__input"
+            id="signup-code"
+            type="text"
+            data-settings-code
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="admin__btn" type="button" data-settings-save>Save</button>
+        </div>
+        <p class="admin__msg" data-settings-msg role="status"></p>
       </div>
 
       <!-- Reports tab: reader reports grouped per deck -->
@@ -683,9 +709,43 @@ import DeckModal from "../components/DeckModal.astro";
     }
   }
 
+  // ── Settings tab (signup gate; owner-only) ─────────────────
+  async function loadSettings() {
+    const res = await fetch("/api/admin/signup-settings", { headers: authHeaders() });
+    if (res.status === 401) return signOut();
+    if (!res.ok) return;
+    const s = await res.json();
+    const require = $<HTMLInputElement>("[data-settings-require]");
+    const code = $<HTMLInputElement>("[data-settings-code]");
+    if (require) require.checked = Boolean(s.require_code);
+    if (code) code.value = s.code ?? "";
+  }
+
+  async function saveSettings() {
+    const require = $<HTMLInputElement>("[data-settings-require]")?.checked ?? true;
+    const code = $<HTMLInputElement>("[data-settings-code]")?.value.trim() ?? "";
+    const msg = $<HTMLElement>("[data-settings-msg]");
+    const res = await fetch("/api/admin/signup-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ require_code: require, code: code || null }),
+    });
+    if (res.status === 401) return signOut();
+    const data = await res.json().catch(() => ({}));
+    if (msg) {
+      msg.textContent = res.ok
+        ? `Saved. Sign-ups ${data.require_code ? "require the invite code" : "are open (no code needed)"}.`
+        : `Error: ${data.detail ?? res.status}`;
+    }
+    if (res.ok) loadSettings();
+  }
+
   // ── Init ───────────────────────────────────────────────────
   function enter() {
     showPanel();
+    // The Settings tab is instance policy — owner only.
+    const settingsTab = $<HTMLElement>("[data-settings-tab]");
+    if (settingsTab) settingsTab.hidden = !viewerIsOwner;
     selectTab("users");
     loadUsers();
     refreshFlaggedCount();
@@ -711,6 +771,7 @@ import DeckModal from "../components/DeckModal.astro";
         if (tab.dataset.tab === "decks") loadDecks();
         if (tab.dataset.tab === "flagged") loadFlagged();
         if (tab.dataset.tab === "reports") loadReports();
+        if (tab.dataset.tab === "settings") loadSettings();
       });
     }
     $("[data-back-users]")?.addEventListener("click", backToUsers);
@@ -722,6 +783,7 @@ import DeckModal from "../components/DeckModal.astro";
       if (file) upload(file).then(() => input && (input.value = ""));
     });
 
+    $("[data-settings-save]")?.addEventListener("click", saveSettings);
     $("[data-signout]")?.addEventListener("click", signOut);
 
     // Admission order: the viewer's own session (admins + owner, no lock
@@ -944,6 +1006,22 @@ import DeckModal from "../components/DeckModal.astro";
   }
   .admin__row--banned td {
     opacity: 0.55;
+  }
+
+  /* Settings tab */
+  .admin__check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1.25rem;
+    color: var(--vd-text);
+    cursor: pointer;
+  }
+  .admin__label {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--vd-text-muted);
+    margin-bottom: 0.4rem;
   }
   .admin__deck-reasons {
     font-size: 0.8rem;

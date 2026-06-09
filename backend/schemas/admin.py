@@ -29,6 +29,20 @@ class ModerationSummary(BaseModel):
     reports_24h: int = 0  # report rows filed in the last 24 hours
 
 
+class SignupSettings(BaseModel):
+    """The signup gate's current state (owner-only surface)."""
+
+    require_code: bool
+    code: str  # the effective invite code, so the owner can copy/share it
+
+
+class SignupSettingsInput(BaseModel):
+    """PUT body for the signup gate. `code` null/blank = leave unchanged."""
+
+    require_code: bool
+    code: str | None = None
+
+
 class ReportedDeckItem(BaseModel):
     """One reported deck in the admin Reports queue (reports grouped)."""
 

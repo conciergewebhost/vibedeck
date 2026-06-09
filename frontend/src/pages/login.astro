@@ -13,8 +13,11 @@ import { fetchMeta } from "../lib/api";
 // Standalone instances have no public sign-up, so we drop the invite-code
 // field and the "new account" copy. Default to allowing it if /api/meta is
 // unreachable, so a backend hiccup never hides the field from a real host.
+// The invite-code requirement is runtime-managed (admin Settings tab);
+// when it's off, only the handle field shows for new accounts.
 const meta = await fetchMeta().catch(() => null);
 const allowSignup = meta?.allow_public_signup ?? true;
+const codeRequired = meta?.signup_code_required ?? true;
 ---
 
 <BaseLayout title="Sign in — Vibedeck">
@@ -22,7 +25,7 @@ const allowSignup = meta?.allow_public_signup ?? true;
     <h1 class="login__title">Sign in to Vibedeck</h1>
     <p class="login__lead">
       Enter your email and we'll send you a one-click sign-in link — no password
-      needed.{allowSignup ? " Creating a new account during the testing phase requires an invite code." : ""}
+      needed.{allowSignup && codeRequired ? " Creating a new account requires an invite code." : ""}
     </p>
 
     <form class="login__form" data-login-form>
@@ -37,7 +40,7 @@ const allowSignup = meta?.allow_public_signup ?? true;
         placeholder="you@example.com"
       />
 
-      {allowSignup && (
+      {allowSignup && codeRequired && (
         <>
           <label class="login__label" for="code">Invite code <span class="login__hint">(new accounts only)</span></label>
           <input
@@ -48,7 +51,10 @@ const allowSignup = meta?.allow_public_signup ?? true;
             autocomplete="off"
             placeholder="Leave blank if you already have an account"
           />
-
+        </>
+      )}
+      {allowSignup && (
+        <>
           <label class="login__label" for="handle">Handle <span class="login__hint">(new accounts only)</span></label>
           <input
             class="login__input"
