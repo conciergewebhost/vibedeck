@@ -10,6 +10,7 @@ can never shadow it.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from config import settings
 from database import get_db
 from models import User
 from schemas.deck import PublicDeckItem
@@ -24,9 +25,13 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserOut)
-def read_current_user(current_user: User = Depends(get_current_user)) -> User:
-    """Return the authenticated user's profile."""
-    return current_user
+def read_current_user(current_user: User = Depends(get_current_user)) -> UserOut:
+    """Return the authenticated user's profile, including role flags."""
+    is_owner = current_user.email == settings.UPLOAD_OWNER_EMAIL
+    out = UserOut.model_validate(current_user)
+    out.is_admin = current_user.is_admin or is_owner
+    out.is_owner = is_owner
+    return out
 
 
 @router.get("/{handle}", response_model=PublicUserProfile)

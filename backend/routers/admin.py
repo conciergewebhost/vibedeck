@@ -13,7 +13,8 @@ from schemas.admin import AdminUserItem, ModerationSummary
 from schemas.deck import AdminDeckItem
 from services import admin as admin_service
 from services import decks as decks_service
-from services.auth import get_current_admin
+from services.admin import RoleChangeForbidden
+from services.auth import get_current_admin, get_current_owner
 
 router = APIRouter()
 
@@ -35,6 +36,44 @@ def list_user_decks(
 ) -> list[AdminDeckItem]:
     """Decks owned by a given user — for the admin per-user view."""
     return decks_service.list_user_decks(db, user_id)
+
+
+# Role management is OWNER-only: admins must not be able to mint or remove
+# other admins. The owner account itself is admin by config (see
+# services.auth.get_current_admin) and its flag can't be changed here.
+
+
+@router.post("/users/{user_id}/promote", status_code=status.HTTP_204_NO_CONTENT)
+def promote_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    owner: User = Depends(get_current_owner),
+) -> Response:
+    """Grant a user the admin surface (idempotent)."""
+    return _set_admin(db, user_id, True)
+
+
+@router.post("/users/{user_id}/demote", status_code=status.HTTP_204_NO_CONTENT)
+def demote_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    owner: User = Depends(get_current_owner),
+) -> Response:
+    """Revoke a user's admin rights (idempotent; effective immediately)."""
+    return _set_admin(db, user_id, False)
+
+
+def _set_admin(db: Session, user_id: int, value: bool) -> Response:
+    try:
+        if not admin_service.set_admin(db, user_id, value):
+            raise HTTPException(status_code=404, detail="User not found")
+    except RoleChangeForbidden:
+        raise HTTPException(
+            status_code=400,
+            detail="The owner account is always an admin; its role can't change.",
+        )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/flagged", response_model=list[AdminDeckItem])

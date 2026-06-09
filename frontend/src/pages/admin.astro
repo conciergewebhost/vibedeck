@@ -57,6 +57,7 @@ import DeckModal from "../components/DeckModal.astro";
               <thead>
                 <tr>
                   <th>Email</th>
+                  <th>Role</th>
                   <th>Decks</th>
                   <th>Created</th>
                   <th>Last login</th>
@@ -137,13 +138,22 @@ import DeckModal from "../components/DeckModal.astro";
     last_login_at: string | null;
     deck_count: number;
     last_deck_at: string | null;
+    is_admin: boolean;
+    is_owner: boolean;
   };
 
   const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
+  // The token all admin calls use: either the viewer's own session JWT
+  // (promoted admins + the owner, attributable) or the shared-token owner
+  // JWT (the legacy unlock, owner-only fallback).
+  let activeToken: string | null = null;
+  // Role management (promote/demote) is owner-only; admins see the Users
+  // tab without the role buttons.
+  let viewerIsOwner = false;
+
   function authHeaders(): Record<string, string> {
-    const jwt = sessionStorage.getItem(TOKEN_KEY);
-    return jwt ? { Authorization: `Bearer ${jwt}` } : {};
+    return activeToken ? { Authorization: `Bearer ${activeToken}` } : {};
   }
 
   function fmtDate(iso: string | null): string {
@@ -172,7 +182,11 @@ import DeckModal from "../components/DeckModal.astro";
     $("[data-panel]")?.removeAttribute("hidden");
   }
   function signOut() {
+    // Drops admin access only — a viewer's normal site session (vd_session)
+    // is theirs and survives leaving the admin surface.
     sessionStorage.removeItem(TOKEN_KEY);
+    activeToken = null;
+    viewerIsOwner = false;
     showLock();
   }
   async function unlock(token: string): Promise<boolean> {
@@ -184,7 +198,29 @@ import DeckModal from "../components/DeckModal.astro";
     if (!res.ok) return false;
     const data = await res.json();
     sessionStorage.setItem(TOKEN_KEY, data.access_token);
+    activeToken = data.access_token;
+    viewerIsOwner = true; // the shared token always mints the owner JWT
     return true;
+  }
+
+  // Session-first: a signed-in admin (or the owner) enters with their own
+  // JWT and never sees the lock screen. Returns true when admitted.
+  async function trySessionAuth(): Promise<boolean> {
+    const session = localStorage.getItem("vd_session");
+    if (!session) return false;
+    try {
+      const res = await fetch("/api/users/me", {
+        headers: { Authorization: `Bearer ${session}` },
+      });
+      if (!res.ok) return false;
+      const me = await res.json();
+      if (!me.is_admin && !me.is_owner) return false;
+      activeToken = session;
+      viewerIsOwner = Boolean(me.is_owner);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // ── Tabs ───────────────────────────────────────────────────
@@ -292,7 +328,7 @@ import DeckModal from "../components/DeckModal.astro";
     if (users.length === 0) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.colSpan = 6;
+      td.colSpan = 7;
       td.className = "admin__empty";
       td.textContent = "No users yet.";
       tr.append(td);
@@ -303,6 +339,7 @@ import DeckModal from "../components/DeckModal.astro";
       const tr = document.createElement("tr");
       const cells = [
         u.email,
+        u.is_owner ? "owner" : u.is_admin ? "admin" : "—",
         String(u.deck_count),
         fmtDate(u.created_at),
         fmtDate(u.last_login_at),
@@ -321,9 +358,31 @@ import DeckModal from "../components/DeckModal.astro";
       btn.disabled = u.deck_count === 0;
       btn.addEventListener("click", () => viewUserDecks(u));
       tdAction.append(btn);
+      // Role management: owner-only, and never on the owner's own row
+      // (their adminship is configuration, not the flag).
+      if (viewerIsOwner && !u.is_owner) {
+        const role = document.createElement("button");
+        role.className = u.is_admin ? "admin__del" : "admin__ghost";
+        role.type = "button";
+        role.textContent = u.is_admin ? "Demote" : "Promote";
+        role.addEventListener("click", () => setRole(u, !u.is_admin));
+        tdAction.append(role);
+      }
       tr.append(tdAction);
       body.append(tr);
     }
+  }
+
+  async function setRole(u: AdminUser, makeAdmin: boolean) {
+    const action = makeAdmin ? "promote" : "demote";
+    if (!makeAdmin && !confirm(`Demote ${u.email}? They lose admin access immediately.`))
+      return;
+    const res = await fetch(`/api/admin/users/${u.id}/${action}`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (res.status === 401) return signOut();
+    if (res.ok) loadUsers();
   }
 
   async function viewUserDecks(u: AdminUser) {
@@ -518,8 +577,19 @@ import DeckModal from "../components/DeckModal.astro";
 
     $("[data-signout]")?.addEventListener("click", signOut);
 
-    if (sessionStorage.getItem(TOKEN_KEY)) enter();
-    else showLock();
+    // Admission order: the viewer's own session (admins + owner, no lock
+    // screen), then a previously-unlocked shared-token JWT, then the lock.
+    trySessionAuth().then((admitted) => {
+      if (admitted) return enter();
+      const stored = sessionStorage.getItem(TOKEN_KEY);
+      if (stored) {
+        activeToken = stored;
+        viewerIsOwner = true; // the shared token always mints the owner JWT
+        enter();
+      } else {
+        showLock();
+      }
+    });
   }
 
   initAdmin();

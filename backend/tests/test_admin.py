@@ -152,11 +152,24 @@ class TestListUsers(_Base):
         self.assertIsNotNone(by_email["u1@e.com"]["last_deck_at"])
         self.assertEqual(by_email["u2@e.com"]["deck_count"], 0)
         self.assertIsNone(by_email["u2@e.com"]["last_deck_at"])
-        # Shape includes the monitoring fields.
+        # Shape includes the monitoring fields + role flags.
         self.assertEqual(
             set(rows[0]),
-            {"id", "email", "created_at", "last_login_at", "deck_count", "last_deck_at"},
+            {
+                "id",
+                "email",
+                "created_at",
+                "last_login_at",
+                "deck_count",
+                "last_deck_at",
+                "is_admin",
+                "is_owner",
+            },
         )
+        # The owner row reports admin/owner via config, not the flag.
+        self.assertTrue(by_email[OWNER]["is_admin"])
+        self.assertTrue(by_email[OWNER]["is_owner"])
+        self.assertFalse(by_email["u1@e.com"]["is_admin"])
 
 
 class TestRecordLogin(_Base):
@@ -174,3 +187,78 @@ class TestRecordLogin(_Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRoles(_Base):
+    """Promotable admins: is_admin grants the admin surface; role management
+    is owner-only; the owner is admin by config, not by flag."""
+
+    def _promote(self, user_id, auth):
+        return self.client.post(f"/api/admin/users/{user_id}/promote", headers=auth)
+
+    def test_owner_promotes_and_demotes(self):
+        self._make_user(OWNER)
+        uid = self._make_user("mod@e.com")
+        owner, mod = self._auth(OWNER), self._auth("mod@e.com")
+
+        # Before: no admin surface.
+        self.assertEqual(self.client.get("/api/admin/users", headers=mod).status_code, 403)
+
+        self.assertEqual(self._promote(uid, owner).status_code, 204)
+        # Effective immediately, across the whole admin surface.
+        self.assertEqual(self.client.get("/api/admin/users", headers=mod).status_code, 200)
+        self.assertEqual(self.client.get("/api/admin/flagged", headers=mod).status_code, 200)
+        self.assertEqual(self.client.get("/api/decks", headers=mod).status_code, 200)
+
+        self.assertEqual(
+            self.client.post(f"/api/admin/users/{uid}/demote", headers=owner).status_code,
+            204,
+        )
+        self.assertEqual(self.client.get("/api/admin/users", headers=mod).status_code, 403)
+
+    def test_admins_cannot_manage_roles(self):
+        self._make_user(OWNER)
+        mod_id = self._make_user("mod@e.com")
+        other_id = self._make_user("other@e.com")
+        owner, mod = self._auth(OWNER), self._auth("mod@e.com")
+        self._promote(mod_id, owner)
+
+        # A promoted admin can use the surface but not mint/remove admins.
+        self.assertEqual(self._promote(other_id, mod).status_code, 403)
+        self.assertEqual(
+            self.client.post(f"/api/admin/users/{mod_id}/demote", headers=mod).status_code,
+            403,
+        )
+
+    def test_owner_role_is_immutable(self):
+        owner_id = self._make_user(OWNER)
+        owner = self._auth(OWNER)
+        self.assertEqual(self._promote(owner_id, owner).status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                f"/api/admin/users/{owner_id}/demote", headers=owner
+            ).status_code,
+            400,
+        )
+
+    def test_unknown_user_404(self):
+        self._make_user(OWNER)
+        self.assertEqual(self._promote(999, self._auth(OWNER)).status_code, 404)
+
+    def test_me_carries_role_flags(self):
+        self._make_user(OWNER)
+        uid = self._make_user("mod@e.com")
+        owner, mod = self._auth(OWNER), self._auth("mod@e.com")
+
+        me = self.client.get("/api/users/me", headers=owner).json()
+        self.assertTrue(me["is_admin"])
+        self.assertTrue(me["is_owner"])
+
+        me = self.client.get("/api/users/me", headers=mod).json()
+        self.assertFalse(me["is_admin"])
+        self.assertFalse(me["is_owner"])
+
+        self._promote(uid, owner)
+        me = self.client.get("/api/users/me", headers=mod).json()
+        self.assertTrue(me["is_admin"])
+        self.assertFalse(me["is_owner"])

@@ -4,6 +4,8 @@ Run from the backend/ directory with the venv active:
 
     python manage.py create-user alice@example.com [--password s3cret] [--handle alice]
     python manage.py delete-user alice@example.com
+    python manage.py promote-user alice@example.com
+    python manage.py demote-user alice@example.com
     python manage.py list-decks
     python manage.py reindex
     python manage.py delete-deck <topic-slug> <deck-slug> [--handle alice]
@@ -97,6 +99,28 @@ def delete_user(email: str) -> int:
         db.delete(user)
         db.commit()
         print(f"Deleted user {email!r}.")
+        return 0
+    finally:
+        db.close()
+
+
+def set_admin_role(email: str, value: bool) -> int:
+    db = SessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None:
+            print(f"User {email!r} not found.", file=sys.stderr)
+            return 1
+        if email == settings.UPLOAD_OWNER_EMAIL:
+            print(
+                "The owner account is always an admin (config fallback via "
+                "UPLOAD_OWNER_EMAIL); its role can't be changed.",
+                file=sys.stderr,
+            )
+            return 1
+        user.is_admin = value
+        db.commit()
+        print(f"{'Promoted' if value else 'Demoted'} {email!r} (is_admin={value}).")
         return 0
     finally:
         db.close()
@@ -240,6 +264,12 @@ def main() -> int:
     du = sub.add_parser("delete-user", help="Delete a user (must own no decks)")
     du.add_argument("email")
 
+    pu = sub.add_parser("promote-user", help="Grant a user the admin surface")
+    pu.add_argument("email")
+
+    dm = sub.add_parser("demote-user", help="Revoke a user's admin rights")
+    dm.add_argument("email")
+
     sub.add_parser("list-decks", help="List all indexed decks")
     sub.add_parser("reindex", help="Index all deck files and prune deleted ones")
     sub.add_parser("tidy", help="Move legacy flat deck files into owner subdirs")
@@ -261,6 +291,10 @@ def main() -> int:
         return create_user(args.email, password, args.handle)
     if args.command == "delete-user":
         return delete_user(args.email)
+    if args.command == "promote-user":
+        return set_admin_role(args.email, True)
+    if args.command == "demote-user":
+        return set_admin_role(args.email, False)
     if args.command == "list-decks":
         return list_decks()
     if args.command == "reindex":

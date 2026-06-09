@@ -14,6 +14,8 @@ class AdminUserItem(BaseModel):
     last_login_at: datetime | None = None
     deck_count: int
     last_deck_at: datetime | None = None  # most recent deck this user added
+    is_admin: bool = False  # True for the owner too (config-derived)
+    is_owner: bool = False  # the UPLOAD_OWNER_EMAIL account
 
 
 class ModerationSummary(BaseModel):

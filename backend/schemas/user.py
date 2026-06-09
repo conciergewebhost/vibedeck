@@ -13,6 +13,12 @@ class UserOut(BaseModel):
     handle: str
     is_active: bool
     created_at: datetime
+    # Role flags for the session's own /me payload — how the frontend learns
+    # whether to show admin affordances. is_admin is true for the owner too;
+    # is_owner additionally marks the UPLOAD_OWNER_EMAIL account (role
+    # management is owner-only). Computed in the router, not stored.
+    is_admin: bool = False
+    is_owner: bool = False
 
 
 class PublicUserProfile(BaseModel):

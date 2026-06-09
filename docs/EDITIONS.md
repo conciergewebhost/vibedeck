@@ -56,13 +56,15 @@ Already present: accounts, per-user ownership, private themes, admin oversight, 
 rate limiting, upload size caps.
 
 **Gaps to close:**
-- **Roles** — "admin" is currently a single owner-email check (`get_current_admin`). A real host
-  wants promotable admins/moderators (an `is_admin` column).
 - **Quotas + abuse controls** — per-user deck/storage limits, a report/takedown path, and a user
   ban/deactivate UI (`User.is_active` exists; no admin control surfaces it yet).
 
 **Already closed:**
 - ~~Per-deck visibility~~ — `public` / `unlisted` / `private` shipped (`Deck.visibility`).
+- ~~Roles~~ — **promotable admins shipped**: `users.is_admin` grants the full admin surface;
+  the owner (`UPLOAD_OWNER_EMAIL`) is admin by config fallback (can't be locked out) and is the
+  only one who can promote/demote (`get_current_owner`). Admins enter `/admin` with their own
+  session (attributable); the shared `UPLOAD_TOKEN` unlock remains as the owner fallback.
 - ~~Content moderation~~ — the algorithmic layer shipped (hybrid auto-block/flag + admin review
   queue + daily digest; AI second pass still deferred — see `HANDOFF.md`).
 - ~~The namespace rework~~ — **per-user spaces shipped**: users have public handles, topics are
@@ -98,9 +100,9 @@ nothing but the `users.handle` column carries the name.
 
 ## Readiness checklist
 
-**Server-ready, still open:** roles (`is_admin`) · quotas + abuse controls · the AI moderation
-second pass. (Done: per-deck visibility · algorithmic content moderation · the per-user-spaces
-namespace rework.)
+**Server-ready, still open:** quotas + abuse controls · the AI moderation second pass.
+(Done: per-deck visibility · algorithmic content moderation · the per-user-spaces namespace
+rework · roles/promotable admins.)
 
 ---
 

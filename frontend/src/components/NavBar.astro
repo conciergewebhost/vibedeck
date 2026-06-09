@@ -32,6 +32,8 @@ const showSandbox = meta?.edition === "server";
       <!-- Logged-in (revealed client-side when a session exists). -->
       <span class="nav__user" data-nav-user hidden>
         <a class="nav__link" href="/account">My decks</a>
+        <!-- Admins (and the owner) get a direct link to the admin surface. -->
+        <a class="nav__link" href="/admin" data-nav-admin hidden>Admin</a>
         <span class="nav__email" data-nav-email></span>
         <button class="nav__logout" type="button" data-nav-logout>Log out</button>
       </span>
@@ -71,6 +73,10 @@ const showSandbox = meta?.edition === "server";
       emailEl.textContent = user.email ?? "Account";
       loginLink.hidden = true;
       userBox.hidden = false;
+      if (user.is_admin || user.is_owner) {
+        const adminLink = document.querySelector<HTMLElement>("[data-nav-admin]");
+        if (adminLink) adminLink.hidden = false;
+      }
     } catch {
       /* network hiccup — leave the logged-out bar in place */
     }

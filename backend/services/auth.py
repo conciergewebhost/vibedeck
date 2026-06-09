@@ -160,15 +160,34 @@ def get_current_user(
 
 
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Resolve the current user and require the admin (owner) account, else 403.
+    """Resolve the current user and require admin rights, else 403.
 
-    Admin == the configured UPLOAD_OWNER_EMAIL account (the same account the
-    /admin upload-token flow mints a JWT for; the owner can also sign in by
-    magic link).
+    Admin == `User.is_admin` (promotable, owner-managed) OR the configured
+    UPLOAD_OWNER_EMAIL account. The owner qualifies by config fallback — not
+    by the flag — so a misconfigured flag can never lock the owner out. The
+    flag is read fresh from the DB per request, so a demotion takes effect
+    immediately (no JWT claims to invalidate).
+    """
+    if not (
+        current_user.is_admin
+        or current_user.email == settings.UPLOAD_OWNER_EMAIL
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+    return current_user
+
+
+def get_current_owner(current_user: User = Depends(get_current_user)) -> User:
+    """Resolve the current user and require the OWNER account, else 403.
+
+    Owner-only actions (today: promoting/demoting admins) are gated on the
+    configured UPLOAD_OWNER_EMAIL — admins must not be able to mint or
+    remove other admins.
     """
     if current_user.email != settings.UPLOAD_OWNER_EMAIL:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required"
         )
     return current_user
 
