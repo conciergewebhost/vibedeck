@@ -27,6 +27,12 @@ import DeckModal from "../components/DeckModal.astro";
       </div>
     </header>
 
+    <p class="portal__notice" data-notice hidden>
+      Your deck was saved, but it's <strong>in review</strong>: an automatic
+      check flagged it for a quick human look. It stays hidden from other
+      readers until it's approved — no action needed on your side.
+    </p>
+
     <ul class="deckgrid" data-deck-list></ul>
 
     <section class="portal__themes">
@@ -94,7 +100,19 @@ import DeckModal from "../components/DeckModal.astro";
       return;
     }
     const V = (window as any).Vibedeck;
-    for (const d of decks) list.append(V.buildCard(d));
+    for (const d of decks) {
+      const card = V.buildCard(d);
+      // Quarantined decks stay listed for their owner, with a state badge.
+      if (d.moderation_status === "flagged") {
+        const badge = document.createElement("span");
+        badge.className = "portal__review";
+        badge.textContent = "In review";
+        badge.title = "Hidden from readers until approved by a moderator.";
+        card.append(badge);
+        card.classList.add("portal__card--review");
+      }
+      list.append(card);
+    }
   }
 
   async function loadThemes() {
@@ -149,6 +167,12 @@ import DeckModal from "../components/DeckModal.astro";
   function initPortal() {
     requireSession();
     $("[data-logout]")?.addEventListener("click", logout);
+
+    // The editor/builder land here with ?flagged=1 when a save was quarantined.
+    if (new URLSearchParams(location.search).get("flagged")) {
+      $("[data-notice]")?.removeAttribute("hidden");
+      history.replaceState(null, "", "/account");
+    }
 
     document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
@@ -211,6 +235,32 @@ import DeckModal from "../components/DeckModal.astro";
   }
   .portal__empty {
     color: var(--vd-text-muted);
+  }
+  .portal__notice {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid #fbbf24;
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .portal__card--review {
+    position: relative;
+    opacity: 0.85;
+  }
+  .portal__review {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.1rem 0.5rem;
+    background: #fbbf24;
+    border-radius: 999px;
+    color: #1a1a1a;
+    font-size: 0.7rem;
+    font-weight: 700;
+    pointer-events: none;
   }
 
   /* ── Themes ── */

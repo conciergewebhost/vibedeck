@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS_PER_HOUR: int = 12
     RATE_LIMIT_BAD_CODE_PER_HOUR: int = 5
 
+    # Where the daily moderation digest goes (see jobs/daily_digest.py).
+    # Blank → falls back to the owner/admin account email.
+    ADMIN_DIGEST_EMAIL: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
@@ -111,6 +115,11 @@ class Settings(BaseSettings):
     def quotas_enabled(self) -> bool:
         """Server-only: per-user deck/storage quotas and abuse controls."""
         return self.is_server
+
+    @property
+    def admin_digest_email(self) -> str:
+        """Recipient of the daily moderation digest; defaults to the owner."""
+        return self.ADMIN_DIGEST_EMAIL or self.UPLOAD_OWNER_EMAIL
 
 
 # Single import-time instance; FastAPI dependencies read from this.

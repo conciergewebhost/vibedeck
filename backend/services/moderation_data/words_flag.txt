@@ -1,0 +1,51 @@
+# Flag tier — terms that warrant a human look but have plausible innocent
+# uses (casual profanity, reclaimed terms, spam-adjacent marketing words).
+# A match here QUARANTINES the deck: it is saved but hidden from public
+# view until an admin approves it from the review queue. We lean cautious:
+# when in doubt a term goes here, not nowhere.
+#
+# Format: one entry per line, lowercase; phrases allowed (matched with
+# word boundaries at both ends, case-insensitive). Lines starting with #
+# and blank lines are ignored. Extend freely — changes apply on restart.
+
+# Profanity / harassment-adjacent
+retard
+retarded
+dyke
+paki
+cunt
+cunts
+whore
+whores
+slut
+sluts
+bitch
+bitches
+nazi
+nazis
+rape
+rapist
+
+# Adult / spam-adjacent (SEO abuse commonly rides on these)
+porn
+xxx
+nude
+nudes
+onlyfans
+escort
+escorts
+viagra
+cialis
+casino
+casinos
+betting
+jackpot
+forex
+payday loan
+payday loans
+buy now
+click here
+free money
+work from home
+get rich
+weight loss

@@ -74,6 +74,9 @@ class UploadResult(BaseModel):
     title: str
     card_count: int
     url: str  # reader path, e.g. /z13/the-12-houses
+    # "flagged" when moderation quarantined the deck pending admin review —
+    # the portal tells the author instead of linking to a 404ing reader URL.
+    moderation_status: str = "approved"
 
 
 class PublicDeckItem(BaseModel):
@@ -109,3 +112,6 @@ class AdminDeckItem(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     owner_email: str | None = None  # populated for the admin all-decks list
+    moderation_status: str = "approved"
+    moderation_reasons: str | None = None  # newline-joined verdict reasons
+    flagged_at: datetime | None = None  # populated for the review queue

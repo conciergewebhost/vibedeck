@@ -260,10 +260,14 @@ Unlisted and private decks are served with `noindex` (and private decks 404 publ
       a deck's custom theme renders for **all** readers (SSR-inlined)
 - [x] **Per-deck visibility** — public / unlisted / private
 - [x] Admin portal: view/delete any deck + monitor users (owner-only)
-- [ ] **Content moderation for user-submitted deck text** — SEO/link-abuse + hurtful/harmful detection.
-      In-browser authoring (builder + editor) is available; raw markdown *file upload* stays admin-only,
-      and the theme builder is safe by construction (constrained tokens). Deck **body text** still needs
-      moderation before fully opening submissions (see HANDOFF.md for the design discussion).
+- [x] **Content moderation for user-submitted deck text** (algorithmic layer) — hybrid enforcement:
+      egregious violations (severe slurs, link farms, blocklisted domains) are auto-blocked at submit;
+      suspicious content is flagged + quarantined until an admin approves it from the `/admin` review
+      queue. A daily digest email reports queue size and last-24h block/flag counts. Server edition
+      only; tunable via wordlist/blocklist data files. (See HANDOFF.md.)
+- [ ] Content moderation, AI second pass — a Claude classifier layered onto the heuristics
+      (escalate-only; needs `ANTHROPIC_API_KEY`; run async). Seam: `TODO(v2+)` in
+      `backend/services/moderation.py`.
 - [ ] Keyword filtering UI on deck index
 - [ ] Search across decks
 - [ ] Transition effects between cards

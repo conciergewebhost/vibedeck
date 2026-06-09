@@ -117,6 +117,7 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 | `EDITION` | `standalone` (single user, no public signup) or `server` (multi-user host) — defaults to `standalone` |
 | `UPLOAD_TOKEN` | Shared token for the `/admin` web upload surface — `openssl rand -hex 32` |
 | `UPLOAD_OWNER_EMAIL` | Account that token-gated and CLI uploads are attributed to |
+| `ADMIN_DIGEST_EMAIL` | Recipient of the daily moderation digest (optional — defaults to `UPLOAD_OWNER_EMAIL`) |
 
 ---
 

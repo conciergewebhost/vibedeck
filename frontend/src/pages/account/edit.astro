@@ -129,7 +129,11 @@ One focused idea per card.
       });
       if (res.status === 401) return handle401();
       if (res.ok) {
-        location.assign("/account");
+        const data = await res.json().catch(() => ({}));
+        // A flagged save is quarantined — tell the author on the portal.
+        location.assign(
+          data.moderation_status === "flagged" ? "/account?flagged=1" : "/account",
+        );
         return;
       }
       const data = await res.json().catch(() => ({}));

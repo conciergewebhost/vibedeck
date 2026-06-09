@@ -1,0 +1,36 @@
+# Block tier — unambiguous slurs, hate speech, and direct-harm phrases.
+# A match here REJECTS the deck at submit time (the author sees an error
+# and nothing is saved). Because a hit is unappealable-by-default, keep
+# this list to terms with essentially no innocent use; anything with a
+# plausible legitimate reading belongs in words_flag.txt instead.
+#
+# Format: one entry per line, lowercase; phrases allowed (matched with
+# word boundaries at both ends, case-insensitive). Lines starting with #
+# and blank lines are ignored. Extend freely — changes apply on restart.
+nigger
+niggers
+faggot
+faggots
+kike
+kikes
+spic
+spics
+wetback
+wetbacks
+chink
+chinks
+gook
+gooks
+beaner
+beaners
+raghead
+ragheads
+towelhead
+towelheads
+tranny
+trannies
+porch monkey
+gas the jews
+hitler was right
+kill yourself
+kys

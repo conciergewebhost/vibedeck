@@ -1,0 +1,10 @@
+[Unit]
+Description=Vibedeck daily moderation digest email (oneshot)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=chronos
+WorkingDirectory=/home/chronos/sites/vibedeck/backend
+ExecStart=/home/chronos/sites/vibedeck/.venv/bin/python -m jobs.daily_digest

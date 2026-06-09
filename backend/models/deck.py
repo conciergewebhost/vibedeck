@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -60,6 +61,21 @@ class Deck(Base):
     #   private  — owner-only (the public reader 404s it)
     visibility: Mapped[str] = mapped_column(
         String(12), default="public", server_default="public", index=True
+    )
+
+    # Moderation verdict from services.moderation (server edition only):
+    #   approved — passed the checks (or moderation is off / admin approved)
+    #   flagged  — suspicious; withheld from public view (treated like
+    #              private on public read paths) until an admin approves
+    # Blocked decks never get a row at all — they are rejected at submit.
+    moderation_status: Mapped[str] = mapped_column(
+        String(12), default="approved", server_default="approved", index=True
+    )
+    # Human-readable reasons from the verdict, newline-joined; shown in the
+    # admin review queue. Null when approved on first sight.
+    moderation_reasons: Mapped[str | None] = mapped_column(Text, default=None)
+    flagged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )
 
     # Pointer to the canonical file under UPLOAD_DIR (relative filename).

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Vibedeck moderation digest daily at 08:00
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+# Catch up after downtime: if the server was off at 08:00, run on boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

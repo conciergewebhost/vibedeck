@@ -52,6 +52,28 @@ systemctl status vibedeck-api vibedeck-web --no-pager
 The backend reads `.env` itself, so no `EnvironmentFile=` is needed. Both units
 use `Restart=always`.
 
+### Daily moderation digest (server edition only)
+
+The `server` edition emails the admin a daily moderation digest (review-queue
+size + last-24h block/flag counts; see `backend/jobs/daily_digest.py`). It is
+a oneshot service fired by a systemd timer. Edit `vibedeck-digest.service`
+(`WorkingDirectory`, venv path, `User`) and `vibedeck-digest.timer`
+(`OnCalendar` if 08:00 server time isn't what you want), then:
+
+```bash
+sudo cp deploy/systemd/vibedeck-digest.service deploy/systemd/vibedeck-digest.timer \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now vibedeck-digest.timer
+systemctl list-timers vibedeck-digest.timer --no-pager   # confirm next run
+```
+
+Test a send immediately with `sudo systemctl start vibedeck-digest.service`
+(or run `python -m jobs.daily_digest` from `backend/`). The recipient is
+`ADMIN_DIGEST_EMAIL` from `.env`, falling back to `UPLOAD_OWNER_EMAIL`.
+A standalone-edition instance exits without sending, so the units are safe to
+install everywhere.
+
 ## 3. Configure Caddy
 
 Adapt `deploy/caddy/vibedeck.online.caddy` (your domain + the two ports), then

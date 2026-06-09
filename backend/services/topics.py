@@ -11,6 +11,13 @@ from schemas.topic import TopicDetail, TopicSummary
 _TOP_KEYWORDS = 5
 
 
+def _is_listable(deck) -> bool:
+    """Whether a deck belongs in public listings: public visibility only
+    (unlisted stays reachable by direct link but unlisted), and not
+    quarantined by moderation."""
+    return deck.visibility == "public" and deck.moderation_status == "approved"
+
+
 def _deck_list_item(deck) -> DeckListItem:
     return DeckListItem(
         slug=deck.slug,
@@ -28,8 +35,11 @@ def list_topics(db: Session) -> list[TopicSummary]:
     topics = db.scalars(select(Topic).order_by(Topic.display_name)).all()
     summaries: list[TopicSummary] = []
     for topic in topics:
+        visible = [d for d in topic.decks if _is_listable(d)]
+        if not visible:  # topics with no listable decks stay off the index
+            continue
         counts: dict[str, int] = {}
-        for deck in topic.decks:
+        for deck in visible:
             for kw in deck.keywords:
                 counts[kw.value] = counts.get(kw.value, 0) + 1
         # Most frequent first, ties broken alphabetically for stable output.
@@ -45,7 +55,7 @@ def list_topics(db: Session) -> list[TopicSummary]:
                 display_name=topic.display_name,
                 description=topic.description,
                 theme=topic.theme,
-                deck_count=len(topic.decks),
+                deck_count=len(visible),
                 top_keywords=top,
             )
         )
@@ -58,7 +68,9 @@ def get_topic_with_decks(db: Session, slug: str) -> TopicDetail | None:
     if topic is None:
         return None
     decks = [
-        _deck_list_item(d) for d in sorted(topic.decks, key=lambda d: d.title.lower())
+        _deck_list_item(d)
+        for d in sorted(topic.decks, key=lambda d: d.title.lower())
+        if _is_listable(d)
     ]
     return TopicDetail(
         slug=topic.slug,

@@ -31,7 +31,13 @@ from schemas.deck import (
 )
 from services import decks as decks_service
 from services.auth import get_current_admin, get_current_user
-from services.decks import DeckConflict, DeckNotOwned, DeckTooLarge, DeckUnsafe
+from services.decks import (
+    DeckBlocked,
+    DeckConflict,
+    DeckNotOwned,
+    DeckTooLarge,
+    DeckUnsafe,
+)
 from services.parser import DeckParseError, parse_deck
 from services.ratelimit import SlidingWindowLimiter, client_ip
 
@@ -75,7 +81,11 @@ async def upload_deck(
         )
 
     try:
-        deck = decks_service.create_user_deck(db, current_user.id, text)
+        # moderated=False: this surface is admin-only and trusted; the portal
+        # builder/editor paths below are the moderated ones.
+        deck = decks_service.create_user_deck(
+            db, current_user.id, text, moderated=False
+        )
     except DeckTooLarge as exc:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
@@ -192,6 +202,8 @@ def create_my_deck(
         raise HTTPException(status_code=413, detail=str(exc))
     except DeckUnsafe as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except DeckBlocked as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
     except DeckConflict:
@@ -206,6 +218,7 @@ def create_my_deck(
         title=deck.title,
         card_count=deck.card_count,
         url=f"/{deck.topic.slug}/{deck.slug}",
+        moderation_status=deck.moderation_status,
     )
 
 
@@ -247,6 +260,8 @@ def update_my_deck(
         raise HTTPException(status_code=413, detail=str(exc))
     except DeckUnsafe as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except DeckBlocked as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
     except DeckNotOwned:
@@ -265,6 +280,7 @@ def update_my_deck(
         title=deck.title,
         card_count=deck.card_count,
         url=f"/{deck.topic.slug}/{deck.slug}",
+        moderation_status=deck.moderation_status,
     )
 
 

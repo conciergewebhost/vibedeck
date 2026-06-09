@@ -66,3 +66,43 @@ def send_magic_link(to: str, link: str, is_signup: bool) -> None:
 </div>"""
 
     _send(to=to, subject=subject, html=html)
+
+
+def send_moderation_digest(
+    to: str, queue_size: int, blocked_24h: int, flagged_24h: int
+) -> None:
+    """Email the daily moderation digest to the admin.
+
+    Sent every day regardless of counts — a steady heartbeat that also
+    confirms the digest job itself is alive (see jobs/daily_digest.py).
+    """
+    quiet = queue_size == 0 and blocked_24h == 0 and flagged_24h == 0
+    subject = (
+        "Vibedeck moderation: all quiet"
+        if quiet
+        else f"Vibedeck moderation: {queue_size} awaiting review"
+    )
+    queue_url = f"{settings.BASE_URL.rstrip('/')}/admin"
+
+    html = f"""\
+<div style="font-family:system-ui,sans-serif;max-width:32rem;margin:0 auto;line-height:1.6;color:#222">
+  <h1 style="font-size:1.25rem;margin:0 0 1rem">Vibedeck — daily moderation digest</h1>
+  <table style="border-collapse:collapse;margin:0 0 1.25rem">
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">Flagged decks awaiting review</td>
+        <td style="padding:0.3rem 0;font-weight:700">{queue_size}</td></tr>
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">Blocked in the last 24&nbsp;h</td>
+        <td style="padding:0.3rem 0;font-weight:700">{blocked_24h}</td></tr>
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">Newly flagged in the last 24&nbsp;h</td>
+        <td style="padding:0.3rem 0;font-weight:700">{flagged_24h}</td></tr>
+  </table>
+  <p style="margin:0 0 1.5rem">
+    <a href="{queue_url}"
+       style="display:inline-block;background:#c0392b;color:#fff;text-decoration:none;
+              padding:0.7rem 1.4rem;border-radius:6px;font-weight:600">Open the review queue</a>
+  </p>
+  <p style="margin:0;font-size:0.8rem;color:#999">
+    Sent daily by the Vibedeck moderation digest job.
+  </p>
+</div>"""
+
+    _send(to=to, subject=subject, html=html)

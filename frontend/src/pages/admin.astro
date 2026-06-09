@@ -44,6 +44,9 @@ import DeckModal from "../components/DeckModal.astro";
       <nav class="admin__tabs">
         <button class="admin__tab" type="button" data-tab="users" aria-pressed="true">Users</button>
         <button class="admin__tab" type="button" data-tab="decks" aria-pressed="false">Decks</button>
+        <button class="admin__tab" type="button" data-tab="flagged" aria-pressed="false">
+          Flagged<span class="admin__badge" data-flagged-count hidden></span>
+        </button>
       </nav>
 
       <!-- Users tab -->
@@ -92,6 +95,15 @@ import DeckModal from "../components/DeckModal.astro";
         <h2 class="admin__subhead">All decks</h2>
         <ul class="admin__decks" data-deck-list></ul>
       </div>
+
+      <!-- Flagged tab: the moderation review queue -->
+      <div data-view="flagged" hidden>
+        <p class="admin__msg">
+          Decks quarantined by moderation — hidden from readers until approved.
+          Approve to publish, Delete to reject.
+        </p>
+        <ul class="admin__decks" data-flagged-list></ul>
+      </div>
     </section>
   </main>
 
@@ -113,6 +125,9 @@ import DeckModal from "../components/DeckModal.astro";
     created_at: string | null;
     updated_at: string | null;
     owner_email: string | null;
+    moderation_status?: string;
+    moderation_reasons?: string | null;
+    flagged_at?: string | null;
   };
   type AdminUser = {
     id: number;
@@ -356,11 +371,118 @@ import DeckModal from "../components/DeckModal.astro";
     if (res.ok) loadDecks();
   }
 
+  // ── Flagged tab (moderation review queue) ──────────────────
+  async function refreshFlaggedCount() {
+    const res = await fetch("/api/admin/moderation-summary", { headers: authHeaders() });
+    if (!res.ok) return;
+    const { queue_size } = await res.json();
+    const badge = $<HTMLElement>("[data-flagged-count]");
+    if (badge) {
+      badge.textContent = String(queue_size);
+      badge.hidden = queue_size === 0;
+    }
+  }
+
+  async function loadFlagged() {
+    const res = await fetch("/api/admin/flagged", { headers: authHeaders() });
+    if (res.status === 401) return signOut();
+    const decks: AdminDeck[] = await res.json();
+    renderFlagged(decks);
+    refreshFlaggedCount();
+  }
+
+  function renderFlagged(decks: AdminDeck[]) {
+    const list = $<HTMLUListElement>("[data-flagged-list]");
+    if (!list) return;
+    list.replaceChildren();
+    if (decks.length === 0) {
+      const li = document.createElement("li");
+      li.className = "admin__empty";
+      li.textContent = "Nothing in the review queue. 🎉";
+      list.append(li);
+      return;
+    }
+    for (const d of decks) {
+      const li = document.createElement("li");
+      li.className = "admin__deck admin__deck--flagged";
+
+      const title = document.createElement("span");
+      title.className = "admin__deck-title";
+      title.textContent = d.title;
+
+      const meta = document.createElement("span");
+      meta.className = "admin__deck-meta";
+      const flagged = d.flagged_at ? ` · flagged ${fmtDate(d.flagged_at)}` : "";
+      meta.textContent = `${d.owner_email ?? "?"} · /${d.topic}/${d.slug}${flagged}`;
+
+      const reasons = document.createElement("span");
+      reasons.className = "admin__deck-reasons";
+      reasons.textContent = d.moderation_reasons ?? "";
+
+      // The public reader withholds quarantined decks, so review reads the
+      // raw markdown from the admin source endpoint into an inline <pre>.
+      const source = document.createElement("pre");
+      source.className = "admin__deck-source";
+      source.hidden = true;
+
+      const info = document.createElement("div");
+      info.className = "admin__deck-info";
+      info.append(title, meta, reasons, source);
+
+      const view = document.createElement("button");
+      view.className = "admin__ghost";
+      view.type = "button";
+      view.textContent = "View source";
+      view.addEventListener("click", async () => {
+        if (!source.hidden) {
+          source.hidden = true;
+          view.textContent = "View source";
+          return;
+        }
+        const res = await fetch(
+          `/api/admin/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}/source`,
+          { headers: authHeaders() },
+        );
+        if (res.status === 401) return signOut();
+        source.textContent = res.ok ? await res.text() : "Couldn't load the deck source.";
+        source.hidden = false;
+        view.textContent = "Hide source";
+      });
+
+      const approve = document.createElement("button");
+      approve.className = "admin__btn";
+      approve.type = "button";
+      approve.textContent = "Approve";
+      approve.addEventListener("click", async () => {
+        const res = await fetch(
+          `/api/admin/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}/approve`,
+          { method: "POST", headers: authHeaders() },
+        );
+        if (res.status === 401) return signOut();
+        if (res.ok || res.status === 404) loadFlagged();
+      });
+
+      const del = document.createElement("button");
+      del.className = "admin__del";
+      del.type = "button";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteDeck(d, loadFlagged));
+
+      const actions = document.createElement("div");
+      actions.className = "admin__deck-actions";
+      actions.append(view, approve, del);
+
+      li.append(info, actions);
+      list.append(li);
+    }
+  }
+
   // ── Init ───────────────────────────────────────────────────
   function enter() {
     showPanel();
     selectTab("users");
     loadUsers();
+    refreshFlaggedCount();
   }
 
   function initAdmin() {
@@ -381,6 +503,7 @@ import DeckModal from "../components/DeckModal.astro";
       tab.addEventListener("click", () => {
         selectTab(tab.dataset.tab as string);
         if (tab.dataset.tab === "decks") loadDecks();
+        if (tab.dataset.tab === "flagged") loadFlagged();
       });
     }
     $("[data-back-users]")?.addEventListener("click", backToUsers);
@@ -585,5 +708,38 @@ import DeckModal from "../components/DeckModal.astro";
   }
   .admin__empty {
     color: var(--vd-text-muted);
+  }
+
+  /* Flagged tab (moderation review queue) */
+  .admin__badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.45rem;
+    background: #f87171;
+    border-radius: 999px;
+    color: var(--vd-bg);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .admin__deck--flagged {
+    align-items: flex-start;
+  }
+  .admin__deck-reasons {
+    font-size: 0.8rem;
+    color: #fbbf24;
+    white-space: pre-line; /* reasons arrive newline-joined */
+    word-break: break-word;
+  }
+  .admin__deck-source {
+    margin: 0.5rem 0 0;
+    padding: 0.75rem;
+    max-height: 20rem;
+    overflow: auto;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

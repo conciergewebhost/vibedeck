@@ -1,0 +1,11 @@
+# Domain blocklist — a link to any domain listed here BLOCKS the deck at
+# submit time. Subdomains match too (an entry of `spam.example` also
+# catches `shop.spam.example`).
+#
+# Ships empty: there is no universal spam-domain list worth bundling, and
+# blocklisting the wrong domain silently rejects innocent decks. Add
+# domains here as link abuse actually shows up in the flagged queue.
+#
+# Format: one bare domain per line, lowercase, no scheme or path
+# (e.g. `spam-pills.example`). Lines starting with # and blank lines are
+# ignored. Changes apply on restart.

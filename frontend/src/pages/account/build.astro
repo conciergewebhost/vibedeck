@@ -585,7 +585,12 @@ const BUILTIN_THEMES = ["operazione-stile", "fascicolo", "default"];
         body: JSON.stringify({ markdown: buildMarkdown() }),
       });
       if (res.status === 401) return handle401();
-      if (res.ok) return location.assign("/account");
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // A flagged save is quarantined — tell the author on the portal.
+        const dest = data.moderation_status === "flagged" ? "/account?flagged=1" : "/account";
+        return location.assign(dest);
+      }
       const data = await res.json().catch(() => ({}));
       setMsg(data.detail ?? `Could not save (${res.status}).`, "err");
     } catch {

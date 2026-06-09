@@ -1,10 +1,12 @@
 """Admin monitoring queries (owner-only)."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import Deck, User
-from schemas.admin import AdminUserItem
+from models import Deck, ModerationEvent, User
+from schemas.admin import AdminUserItem, ModerationSummary
 
 
 def list_users(db: Session) -> list[AdminUserItem]:
@@ -37,3 +39,32 @@ def list_users(db: Session) -> list[AdminUserItem]:
         )
         for r in rows
     ]
+
+
+def moderation_summary(db: Session) -> ModerationSummary:
+    """Counts for the admin surface + daily digest: current review-queue size
+    and how many decks were blocked / newly flagged in the last 24 hours
+    (from the moderation_events audit log, so the numbers hold even after
+    the queue has been cleared)."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    queue_size = db.scalar(
+        select(func.count())
+        .select_from(Deck)
+        .where(Deck.moderation_status == "flagged")
+    )
+
+    def _events_since(action: str) -> int:
+        return db.scalar(
+            select(func.count())
+            .select_from(ModerationEvent)
+            .where(
+                ModerationEvent.action == action,
+                ModerationEvent.created_at >= since,
+            )
+        )
+
+    return ModerationSummary(
+        queue_size=queue_size or 0,
+        blocked_24h=_events_since("block"),
+        flagged_24h=_events_since("flag"),
+    )
