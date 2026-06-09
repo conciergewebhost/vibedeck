@@ -15,18 +15,21 @@ from sqlalchemy.orm import Session, joinedload
 from config import settings
 from models import Deck, Keyword, ModerationEvent, Topic, User, deck_keywords
 from schemas.deck import AdminDeckItem, Card, DeckDetail, PublicDeckItem
-from services.indexing import deck_filename, index_deck_file
+from services.indexing import (
+    assert_topic_slug_allowed,
+    deck_filename,
+    index_deck_file,
+    slugify,
+)
 from services.moderation import moderate_deck
 from services.parser import ParsedDeck, parse_deck
 from services.themes import get_user_theme_css
 
 
 class DeckConflict(Exception):
-    """A different owner already holds the deck at the derived filename."""
-
-
-class DeckNotOwned(Exception):
-    """The deck exists but belongs to another user."""
+    """The save would collide with another deck (the owner's own deck under
+    the new topic+title on a rename, or — as a safety net — a different
+    owner's file at the derived filename)."""
 
 
 class DeckUnsafe(Exception):
@@ -142,6 +145,26 @@ def _resolve_deck(db: Session, topic_slug: str, deck_slug: str) -> Deck | None:
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
         .where(Topic.slug == topic_slug, Deck.slug == deck_slug)
+    )
+
+
+def _resolve_owned_deck(
+    db: Session, owner_id: int, topic_slug: str, deck_slug: str
+) -> Deck | None:
+    """Look up a deck within ONE owner's namespace, or None.
+
+    Topics are owner-scoped, so the same (topic_slug, deck_slug) pair can
+    exist under several owners; the owner-portal paths must resolve with the
+    owner in the WHERE clause, never globally-then-check.
+    """
+    return db.scalar(
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .where(
+            Deck.owner_id == owner_id,
+            Topic.slug == topic_slug,
+            Deck.slug == deck_slug,
+        )
     )
 
 
@@ -350,37 +373,45 @@ def list_user_decks(db: Session, owner_id: int) -> list[AdminDeckItem]:
 def get_owned_deck_source(
     db: Session, owner_id: int, topic_slug: str, deck_slug: str
 ) -> str | None:
-    """Raw markdown of an owned deck, or None if it doesn't exist.
-
-    Raises DeckNotOwned if the deck exists but belongs to someone else.
-    """
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+    """Raw markdown of an owned deck, or None if the user has no such deck."""
+    deck = _resolve_owned_deck(db, owner_id, topic_slug, deck_slug)
     if deck is None:
         return None
-    if deck.owner_id != owner_id:
-        raise DeckNotOwned()
     return (Path(settings.UPLOAD_DIR) / deck.filename).read_text(encoding="utf-8")
 
 
 def create_user_deck(
     db: Session, owner_id: int, markdown: str, *, moderated: bool = True
 ) -> Deck:
-    """Create a new deck owned by `owner_id` from raw markdown.
+    """Create (or refresh) a deck owned by `owner_id` from raw markdown.
 
-    Raises DeckParseError on malformed markdown, DeckUnsafe on code-like
-    markup, DeckBlocked when moderation rejects the content, and DeckConflict
-    if the derived filename is already held by a different owner. Caller
-    commits. `moderated=False` skips content moderation — only for the
-    trusted admin file-upload path.
+    Identity is (owner, topic slug, title slug): re-saving the same identity
+    refreshes that deck in place, reusing its stored filename — which may be
+    a legacy flat name, so the file never has to move. Raises DeckParseError
+    on malformed markdown, DeckUnsafe on code-like markup, DeckBlocked when
+    moderation rejects the content, and DeckConflict if the derived filename
+    is somehow held by a different owner (unreachable with per-owner dirs;
+    kept as a safety net). Caller commits. `moderated=False` skips content
+    moderation — only for the trusted admin file-upload path.
     """
     assert_deck_size(markdown)  # raises DeckTooLarge
     assert_safe_markup(markdown)  # raises DeckUnsafe
     parsed = parse_deck(markdown)  # raises DeckParseError
-    filename = deck_filename(parsed.meta)
 
-    existing = db.scalar(select(Deck).where(Deck.filename == filename))
-    if existing is not None and existing.owner_id != owner_id:
-        raise DeckConflict()
+    # Resolve identity BEFORE deriving a filename: a legacy deck keeps its
+    # flat filename, so re-deriving here would miss it and duplicate the row.
+    topic_slug = slugify(str(parsed.meta["topic"]))
+    assert_topic_slug_allowed(topic_slug)  # raises before anything is written
+    deck_slug = slugify(str(parsed.meta["title"]))
+    existing = _resolve_owned_deck(db, owner_id, topic_slug, deck_slug)
+    if existing is not None:
+        filename = existing.filename
+    else:
+        owner = db.get(User, owner_id)
+        filename = deck_filename(parsed.meta, owner.handle)
+        clash = db.scalar(select(Deck).where(Deck.filename == filename))
+        if clash is not None and clash.owner_id != owner_id:
+            raise DeckConflict()
 
     if moderated:
         prev = existing.moderation_status if existing is not None else None
@@ -388,7 +419,9 @@ def create_user_deck(
     else:
         mod_status, mod_reasons = "approved", None
 
-    (Path(settings.UPLOAD_DIR) / filename).write_text(markdown, encoding="utf-8")
+    path = Path(settings.UPLOAD_DIR) / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(markdown, encoding="utf-8")
     deck = index_deck_file(db, filename=filename, owner_id=owner_id)
     _apply_moderation(deck, mod_status, mod_reasons)
     db.flush()
@@ -398,29 +431,41 @@ def create_user_deck(
 def update_user_deck(
     db: Session, owner_id: int, topic_slug: str, deck_slug: str, markdown: str
 ) -> Deck | None:
-    """Replace an owned deck's markdown. Returns None if it doesn't exist.
+    """Replace an owned deck's markdown. Returns None if the user has no
+    such deck.
 
-    If the new frontmatter changes the title/topic (and thus the canonical
-    filename), the deck is effectively renamed: the new file is written and
-    indexed, then the old file + rows are pruned. Raises DeckNotOwned if the
-    deck belongs to someone else, DeckParseError on malformed markdown,
-    DeckBlocked when moderation rejects the new content (the old version
-    survives), and DeckConflict if the new filename collides with another
-    owner's deck. Caller commits.
+    Same identity (topic+title slugs unchanged) refreshes the stored file in
+    place — legacy flat filenames stay put. A changed identity is a rename:
+    the new file is written and indexed (keeping the original created_at),
+    then the old file + rows are pruned. Raises DeckParseError on malformed
+    markdown, DeckBlocked when moderation rejects the new content (the old
+    version survives), and DeckConflict if the rename lands on another deck
+    the user already has (or, safety net, another owner's filename). Caller
+    commits.
     """
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+    deck = _resolve_owned_deck(db, owner_id, topic_slug, deck_slug)
     if deck is None:
         return None
-    if deck.owner_id != owner_id:
-        raise DeckNotOwned()
 
     assert_deck_size(markdown)  # raises DeckTooLarge
     assert_safe_markup(markdown)  # raises DeckUnsafe
     old_filename = deck.filename
+    old_created_at = deck.created_at
     parsed = parse_deck(markdown)  # raises DeckParseError
-    new_filename = deck_filename(parsed.meta)
 
-    if new_filename != old_filename:
+    new_topic_slug = slugify(str(parsed.meta["topic"]))
+    assert_topic_slug_allowed(new_topic_slug)  # raises before anything is written
+    new_deck_slug = slugify(str(parsed.meta["title"]))
+    if (new_topic_slug, new_deck_slug) == (topic_slug, deck_slug):
+        new_filename = old_filename  # same identity → refresh in place
+    else:
+        # Renaming onto an identity the user already holds would silently
+        # merge two decks via the filename upsert — reject instead.
+        target = _resolve_owned_deck(db, owner_id, new_topic_slug, new_deck_slug)
+        if target is not None and target.id != deck.id:
+            raise DeckConflict()
+        owner = db.get(User, owner_id)
+        new_filename = deck_filename(parsed.meta, owner.handle)
         clash = db.scalar(select(Deck).where(Deck.filename == new_filename))
         if clash is not None and clash.owner_id != owner_id:
             raise DeckConflict()
@@ -431,30 +476,32 @@ def update_user_deck(
         db, owner_id, parsed, deck.moderation_status
     )
 
-    (Path(settings.UPLOAD_DIR) / new_filename).write_text(markdown, encoding="utf-8")
+    path = Path(settings.UPLOAD_DIR) / new_filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(markdown, encoding="utf-8")
     updated = index_deck_file(db, filename=new_filename, owner_id=owner_id)
     _apply_moderation(updated, mod_status, mod_reasons)
     db.flush()
 
     if new_filename != old_filename:
+        # The rename created a fresh row; it's still the same deck to the
+        # author, so keep the original creation date.
+        updated.created_at = old_created_at
         old = db.scalar(select(Deck).where(Deck.filename == old_filename))
         if old is not None:
             _delete_deck(db, old)
+        db.flush()
     return updated
 
 
 def delete_user_deck(
     db: Session, owner_id: int, topic_slug: str, deck_slug: str
 ) -> bool:
-    """Delete an owned deck. Returns False if not found.
-
-    Raises DeckNotOwned if the deck belongs to someone else. Caller commits.
-    """
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+    """Delete an owned deck. Returns False if the user has no such deck.
+    Caller commits."""
+    deck = _resolve_owned_deck(db, owner_id, topic_slug, deck_slug)
     if deck is None:
         return False
-    if deck.owner_id != owner_id:
-        raise DeckNotOwned()
     _delete_deck(db, deck)
     return True
 

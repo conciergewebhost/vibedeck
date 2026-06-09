@@ -28,12 +28,15 @@ def main() -> None:
         author = db.scalar(select(User).where(User.email == SEED_AUTHOR_EMAIL))
         if author is None:
             # "!" is not a valid hash -> login impossible for the seed user.
-            author = User(email=SEED_AUTHOR_EMAIL, hashed_password="!")
+            author = User(email=SEED_AUTHOR_EMAIL, handle="seed", hashed_password="!")
             db.add(author)
             db.flush()
 
         upload_dir = Path(settings.UPLOAD_DIR)
-        deck_files = sorted(p.name for p in upload_dir.glob("*.md"))
+        # rglob: decks live in per-owner subdirs (legacy flat files included).
+        deck_files = sorted(
+            str(p.relative_to(upload_dir)) for p in upload_dir.rglob("*.md")
+        )
         if not deck_files:
             print(f"No .md decks found under {upload_dir}")
             return

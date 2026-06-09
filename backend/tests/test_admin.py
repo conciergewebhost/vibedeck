@@ -82,7 +82,11 @@ class _Base(unittest.TestCase):
 
     def _make_user(self, email):
         db = self.Session()
-        u = User(email=email, hashed_password=hash_password("x"))
+        u = User(
+            email=email,
+            handle=email.split("@", 1)[0],
+            hashed_password=hash_password("x"),
+        )
         db.add(u)
         db.commit()
         uid = u.id

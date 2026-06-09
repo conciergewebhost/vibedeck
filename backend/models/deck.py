@@ -78,8 +78,12 @@ class Deck(Base):
         DateTime(timezone=True), default=None
     )
 
-    # Pointer to the canonical file under UPLOAD_DIR (relative filename).
-    filename: Mapped[str] = mapped_column(String(300), unique=True)
+    # Pointer to the canonical file: an OPAQUE relative path under
+    # UPLOAD_DIR. New decks land in per-owner subdirs ({handle}/{topic}__
+    # {title}.md); legacy flat filenames stay valid forever and migrate
+    # lazily on edit (or via `manage.py tidy`). Never derived back from —
+    # identity is (owner, topic.slug, slug).
+    filename: Mapped[str] = mapped_column(String(512), unique=True)
 
     # Denormalised card count for listings (see module docstring).
     card_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -114,7 +114,13 @@ class _AppTestCase(unittest.TestCase):
 
     def make_user(self, email):
         db = self.Session()
-        db.add(User(email=email, hashed_password=hash_password("x")))
+        db.add(
+            User(
+                email=email,
+                handle=email.split("@", 1)[0],
+                hashed_password=hash_password("x"),
+            )
+        )
         db.commit()
         db.close()
         return {"Authorization": f"Bearer {create_access_token(subject=email)}"}

@@ -3,6 +3,11 @@
 Auth is baked into the schema from day one even though v1 exposes no
 public login UI — only the upload endpoint is auth-gated. A user owns
 the decks they upload (Deck.owner_id).
+
+`handle` is the user's public namespace segment (/u/{handle}/...), chosen
+at signup or derived from the email local-part. Immutable for now: deck
+filenames are opaque pointers and URLs derive from this column at read
+time, so a rename feature later only has to worry about external links.
 """
 
 from datetime import datetime
@@ -18,6 +23,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Public namespace segment (see module docstring). Slug-validated via
+    # services.handles; reserved words blocked there.
+    handle: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

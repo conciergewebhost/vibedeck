@@ -29,6 +29,7 @@ from services.auth import (
     get_or_create_passwordless_user,
     record_login,
 )
+from services.handles import HandleInvalid, validate_handle
 from services.email import send_magic_link
 from services.ratelimit import SlidingWindowLimiter, client_ip
 
@@ -121,6 +122,7 @@ def request_link(
     email = body.email.lower()
     user = db.scalar(select(User).where(User.email == email))
 
+    handle: str | None = None  # only signups carry one
     if user is not None and user.is_active:
         is_signup = False
     else:
@@ -147,9 +149,23 @@ def request_link(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="A valid invite code is required to create an account.",
             )
+        # Signups choose their public handle up front; validate before
+        # sending the email so the user gets immediate feedback. It is
+        # re-validated at /verify (uniqueness can change in between).
+        if not body.handle:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please choose a handle for your account.",
+            )
+        try:
+            handle = validate_handle(db, body.handle)
+        except HandleInvalid as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            )
         is_signup = True
 
-    token = create_magic_token(email, is_signup=is_signup)
+    token = create_magic_token(email, is_signup=is_signup, handle=handle)
     link = f"{settings.BASE_URL}/auth/verify?token={token}"
     try:
         send_magic_link(to=email, link=link, is_signup=is_signup)
@@ -172,7 +188,7 @@ def verify(body: VerifyInput, db: Session = Depends(get_db)) -> Token:
     existing, active account.
     """
     try:
-        email, is_signup = decode_magic_token(body.token)
+        email, is_signup, handle = decode_magic_token(body.token)
     except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -180,7 +196,15 @@ def verify(body: VerifyInput, db: Session = Depends(get_db)) -> Token:
         )
 
     if is_signup:
-        user = get_or_create_passwordless_user(db, email)
+        try:
+            user = get_or_create_passwordless_user(db, email, handle or "")
+        except HandleInvalid as exc:
+            # The handle was taken between requesting the link and clicking
+            # it (or a stale/replayed link carries a bad one).
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{exc} Please sign up again.",
+            )
     else:
         user = db.scalar(select(User).where(User.email == email))
         if user is None or not user.is_active:

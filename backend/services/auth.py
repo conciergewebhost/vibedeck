@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import User
+from services.handles import validate_handle
 
 # Distinguishes a short-lived magic link from a normal session token so the
 # two can't be swapped: a magic link can't act as a session bearer token and
@@ -63,11 +64,13 @@ def create_access_token(subject: str, expires_minutes: int | None = None) -> str
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_magic_token(email: str, is_signup: bool) -> str:
-    """Mint a short-lived magic-link JWT (email + signup intent).
+def create_magic_token(email: str, is_signup: bool, handle: str | None = None) -> str:
+    """Mint a short-lived magic-link JWT (email + signup intent + handle).
 
     Stateless by design: there is no token table. The link is valid until it
     expires (MAGIC_LINK_EXPIRE_MINUTES) rather than being strictly one-time.
+    Signup tokens carry the handle the user chose on the signup form; it is
+    re-validated when the account is actually created at /verify.
     """
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.MAGIC_LINK_EXPIRE_MINUTES
@@ -78,11 +81,13 @@ def create_magic_token(email: str, is_signup: bool) -> str:
         "signup": is_signup,
         "exp": expire,
     }
+    if handle:
+        payload["handle"] = handle
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_magic_token(token: str) -> tuple[str, bool]:
-    """Validate a magic-link token; return (email, is_signup) or raise.
+def decode_magic_token(token: str) -> tuple[str, bool, str | None]:
+    """Validate a magic-link token; return (email, is_signup, handle) or raise.
 
     Verifies signature, expiry, and that this is actually a magic token
     (not a session token). Raises jwt.InvalidTokenError on any problem so
@@ -96,20 +101,25 @@ def decode_magic_token(token: str) -> tuple[str, bool]:
     email = payload.get("sub")
     if not isinstance(email, str) or not email:
         raise jwt.InvalidTokenError("missing subject")
-    return email, bool(payload.get("signup", False))
+    handle = payload.get("handle")
+    return email, bool(payload.get("signup", False)), handle
 
 
-def get_or_create_passwordless_user(db: Session, email: str) -> User:
+def get_or_create_passwordless_user(db: Session, email: str, handle: str) -> User:
     """Return the user for `email`, creating a passwordless one if needed.
 
-    Magic-link accounts have no usable password, but the schema requires a
-    non-null hash, so we store the hash of a random secret no one knows —
-    making password login impossible without a separate column.
+    `handle` is only used when creating: it is re-validated here (uniqueness
+    can change between requesting the link and clicking it) — services.
+    handles.HandleInvalid propagates to the caller. Magic-link accounts have
+    no usable password, but the schema requires a non-null hash, so we store
+    the hash of a random secret no one knows — making password login
+    impossible without a separate column.
     """
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
         user = User(
             email=email,
+            handle=validate_handle(db, handle),  # raises HandleInvalid
             hashed_password=hash_password(secrets.token_urlsafe(32)),
         )
         db.add(user)

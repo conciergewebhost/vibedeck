@@ -34,7 +34,6 @@ from services.auth import get_current_admin, get_current_user
 from services.decks import (
     DeckBlocked,
     DeckConflict,
-    DeckNotOwned,
     DeckTooLarge,
     DeckUnsafe,
 )
@@ -230,12 +229,9 @@ def get_my_deck_source(
     current_user: User = Depends(get_current_user),
 ) -> DeckSource:
     """Return an owned deck's raw markdown, for the editor."""
-    try:
-        markdown = decks_service.get_owned_deck_source(
-            db, current_user.id, topic_slug, deck_slug
-        )
-    except DeckNotOwned:
-        raise HTTPException(status_code=403, detail="This deck isn't yours.")
+    markdown = decks_service.get_owned_deck_source(
+        db, current_user.id, topic_slug, deck_slug
+    )
     if markdown is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     return DeckSource(
@@ -264,12 +260,10 @@ def update_my_deck(
         raise HTTPException(status_code=422, detail=str(exc))
     except DeckParseError as exc:
         raise HTTPException(status_code=400, detail=f"Malformed deck: {exc}")
-    except DeckNotOwned:
-        raise HTTPException(status_code=403, detail="This deck isn't yours.")
     except DeckConflict:
         raise HTTPException(
             status_code=409,
-            detail="A deck with this topic and title already exists.",
+            detail="You already have a deck with this topic and title.",
         )
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
@@ -292,12 +286,9 @@ def delete_my_deck(
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Delete an owned deck (file + index)."""
-    try:
-        deleted = decks_service.delete_user_deck(
-            db, current_user.id, topic_slug, deck_slug
-        )
-    except DeckNotOwned:
-        raise HTTPException(status_code=403, detail="This deck isn't yours.")
+    deleted = decks_service.delete_user_deck(
+        db, current_user.id, topic_slug, deck_slug
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Deck not found")
     db.commit()

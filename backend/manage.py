@@ -26,6 +26,7 @@ from database import SessionLocal
 from models import Deck, User
 from services.auth import hash_password
 from services.decks import _delete_deck, delete_deck_by_slugs, list_all_decks
+from services.handles import HandleInvalid, derive_handle, validate_handle
 from services.indexing import index_deck_file
 from services.parser import DeckParseError
 
@@ -41,16 +42,25 @@ def _owner(db) -> User:
     return owner
 
 
-def create_user(email: str, password: str) -> int:
+def create_user(email: str, password: str, handle: str | None) -> int:
     db = SessionLocal()
     try:
         if db.scalar(select(User).where(User.email == email)) is not None:
             print(f"User {email!r} already exists.", file=sys.stderr)
             return 1
-        user = User(email=email, hashed_password=hash_password(password))
+        try:
+            resolved = (
+                validate_handle(db, handle) if handle else derive_handle(db, email)
+            )
+        except HandleInvalid as exc:
+            print(f"Invalid handle: {exc}", file=sys.stderr)
+            return 1
+        user = User(
+            email=email, handle=resolved, hashed_password=hash_password(password)
+        )
         db.add(user)
         db.commit()
-        print(f"Created user {email!r} (id={user.id}).")
+        print(f"Created user {email!r} (id={user.id}, handle={resolved!r}).")
         return 0
     finally:
         db.close()
@@ -148,6 +158,11 @@ def main() -> int:
     cu = sub.add_parser("create-user", help="Create an upload-capable user")
     cu.add_argument("email")
     cu.add_argument("--password", help="If omitted, you'll be prompted")
+    cu.add_argument(
+        "--handle",
+        help="Public namespace name (/u/{handle}); derived from the email "
+        "local-part if omitted",
+    )
 
     du = sub.add_parser("delete-user", help="Delete a user (must own no decks)")
     du.add_argument("email")
@@ -166,7 +181,7 @@ def main() -> int:
         if not password:
             print("Password must not be empty.", file=sys.stderr)
             return 2
-        return create_user(args.email, password)
+        return create_user(args.email, password, args.handle)
     if args.command == "delete-user":
         return delete_user(args.email)
     if args.command == "list-decks":

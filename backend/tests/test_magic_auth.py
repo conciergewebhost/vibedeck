@@ -49,17 +49,19 @@ from services.auth import (  # noqa: E402
 
 
 class TestMagicToken(unittest.TestCase):
-    def test_roundtrip_carries_email_and_intent(self):
-        token = create_magic_token("alice@example.com", is_signup=True)
-        email, is_signup = decode_magic_token(token)
+    def test_roundtrip_carries_email_intent_and_handle(self):
+        token = create_magic_token("alice@example.com", is_signup=True, handle="alice")
+        email, is_signup, handle = decode_magic_token(token)
         self.assertEqual(email, "alice@example.com")
         self.assertTrue(is_signup)
+        self.assertEqual(handle, "alice")
 
-    def test_login_token_is_not_signup(self):
-        _, is_signup = decode_magic_token(
+    def test_login_token_is_not_signup_and_has_no_handle(self):
+        _, is_signup, handle = decode_magic_token(
             create_magic_token("bob@example.com", is_signup=False)
         )
         self.assertFalse(is_signup)
+        self.assertIsNone(handle)
 
     def test_session_token_rejected_as_magic(self):
         # A normal access token has no "magic" purpose claim.
@@ -126,7 +128,14 @@ class _AppTestCase(unittest.TestCase):
 
     def add_user(self, email, active=True):
         db = self.Session()
-        db.add(User(email=email, hashed_password=hash_password("x"), is_active=active))
+        db.add(
+            User(
+                email=email,
+                handle=email.split("@", 1)[0],
+                hashed_password=hash_password("x"),
+                is_active=active,
+            )
+        )
         db.commit()
         db.close()
 
@@ -142,11 +151,24 @@ class TestRequestLink(_AppTestCase):
     def test_new_email_with_valid_code_sends_signup_link(self, sender):
         resp = self.client.post(
             "/api/auth/request-link",
-            json={"email": "new@e.com", "code": settings.NEW_USER_CODE},
+            json={
+                "email": "new@e.com",
+                "code": settings.NEW_USER_CODE,
+                "handle": "newbie",
+            },
         )
         self.assertEqual(resp.status_code, 200)
         sender.assert_called_once()
         self.assertTrue(sender.call_args.kwargs["is_signup"])
+
+    @mock.patch("routers.auth.send_magic_link")
+    def test_signup_without_handle_is_rejected(self, sender):
+        resp = self.client.post(
+            "/api/auth/request-link",
+            json={"email": "new@e.com", "code": settings.NEW_USER_CODE},
+        )
+        self.assertEqual(resp.status_code, 400)
+        sender.assert_not_called()
 
     @mock.patch("routers.auth.send_magic_link")
     def test_existing_user_gets_login_link_without_code(self, sender):
@@ -162,7 +184,11 @@ class TestRequestLink(_AppTestCase):
     def test_email_is_normalized_lowercase(self, sender):
         self.client.post(
             "/api/auth/request-link",
-            json={"email": "MixedCase@E.com", "code": settings.NEW_USER_CODE},
+            json={
+                "email": "MixedCase@E.com",
+                "code": settings.NEW_USER_CODE,
+                "handle": "mixed",
+            },
         )
         self.assertEqual(sender.call_args.kwargs["to"], "mixedcase@e.com")
 
@@ -240,15 +266,23 @@ class TestRequestLinkRateLimit(_AppTestCase):
 
 class TestVerify(_AppTestCase):
     def test_signup_link_creates_user_and_returns_token(self):
-        token = create_magic_token("fresh@e.com", is_signup=True)
+        token = create_magic_token("fresh@e.com", is_signup=True, handle="fresh")
         resp = self.client.post("/api/auth/verify", json={"token": token})
         self.assertEqual(resp.status_code, 200)
         self.assertIn("access_token", resp.json())
         db = self.Session()
-        self.assertIsNotNone(
-            db.query(User).filter_by(email="fresh@e.com").one_or_none()
-        )
+        user = db.query(User).filter_by(email="fresh@e.com").one_or_none()
+        self.assertIsNotNone(user)
+        self.assertEqual(user.handle, "fresh")
         db.close()
+
+    def test_signup_link_with_taken_handle_is_rejected(self):
+        # The handle was free at request time but taken before the click.
+        self.add_user("squatter@e.com")  # handle "squatter"
+        token = create_magic_token("late@e.com", is_signup=True, handle="squatter")
+        resp = self.client.post("/api/auth/verify", json={"token": token})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("taken", resp.json()["detail"])
 
     def test_login_link_for_unknown_user_is_rejected(self):
         token = create_magic_token("ghost@e.com", is_signup=False)

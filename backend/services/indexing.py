@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Deck, Keyword, Topic
-from services.parser import VALID_VISIBILITIES, parse_deck
+from services.parser import VALID_VISIBILITIES, DeckParseError, parse_deck
 
 
 def slugify(value: str) -> str:
@@ -26,24 +26,58 @@ def slugify(value: str) -> str:
     return value.strip("-")
 
 
-def deck_filename(meta: dict) -> str:
-    """Deterministic canonical filename from deck frontmatter.
+def deck_filename(meta: dict, owner_handle: str) -> str:
+    """Deterministic canonical relative path from deck frontmatter + owner.
 
-    topic + title slugs keep it unique and human-readable; re-saving the same
-    deck (same topic + title) lands on the same file, refreshing it in place.
-    Never derived from a user-supplied upload filename.
+    Per-owner subdirectory + topic/title slugs keep it unique and
+    human-readable; re-saving the same deck (same owner + topic + title)
+    lands on the same file, refreshing it in place. Never derived from a
+    user-supplied upload filename. Only used for NEW decks — existing rows
+    keep their stored filename as an opaque pointer (legacy flat names
+    included), so identity lookups must never re-derive this.
     """
-    return f"{slugify(str(meta['topic']))}__{slugify(str(meta['title']))}.md"
+    return f"{owner_handle}/{slugify(str(meta['topic']))}__{slugify(str(meta['title']))}.md"
 
 
-def _get_or_create_topic(db: Session, *, topic_field: str, theme: str) -> Topic:
+# Topic slugs that routing shadows: /u/* is the user-space prefix and
+# /embed/* the widget. (Other app routes like /decks or /account are
+# shadowed too, but pre-date per-user spaces; the new prefixes are the ones
+# this rework must not let users squat.)
+_RESERVED_TOPIC_SLUGS = frozenset({"u", "embed"})
+
+
+class TopicReserved(DeckParseError):
+    """The topic slug collides with an app route prefix. Subclasses
+    DeckParseError so every create/update/upload path reports it as a
+    normal 400 validation error without new handling."""
+
+
+def assert_topic_slug_allowed(slug: str) -> None:
+    """Raise TopicReserved for route-shadowed topic slugs. Callers should
+    check BEFORE writing the deck file so a rejection leaves no orphan."""
+    if slug in _RESERVED_TOPIC_SLUGS:
+        raise TopicReserved(
+            f'"{slug}" can\'t be used as a topic name — it collides with a '
+            "reserved address on this site. Please rename the topic."
+        )
+
+
+def _get_or_create_topic(
+    db: Session, *, owner_id: int, topic_field: str, theme: str
+) -> Topic:
     slug = slugify(topic_field)
-    topic = db.scalar(select(Topic).where(Topic.slug == slug))
+    assert_topic_slug_allowed(slug)  # backstop; create/update check earlier
+    # Topics are owner-scoped: each user has their own namespace of slugs.
+    topic = db.scalar(
+        select(Topic).where(Topic.owner_id == owner_id, Topic.slug == slug)
+    )
     if topic is None:
         # First deck in a topic seeds the topic's display name + signature
         # theme from that deck's frontmatter. Curating topic metadata beyond
         # this is a later concern.
-        topic = Topic(slug=slug, display_name=topic_field, theme=theme)
+        topic = Topic(
+            slug=slug, display_name=topic_field, theme=theme, owner_id=owner_id
+        )
         db.add(topic)
         db.flush()
     return topic
@@ -76,7 +110,7 @@ def index_deck_file(db: Session, *, filename: str, owner_id: int) -> Deck:
     meta = parsed.meta
 
     topic = _get_or_create_topic(
-        db, topic_field=str(meta["topic"]), theme=str(meta["theme"])
+        db, owner_id=owner_id, topic_field=str(meta["topic"]), theme=str(meta["theme"])
     )
 
     deck = db.scalar(select(Deck).where(Deck.filename == filename))

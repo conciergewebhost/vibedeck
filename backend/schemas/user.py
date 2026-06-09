@@ -10,5 +10,6 @@ class UserOut(BaseModel):
 
     id: int
     email: str
+    handle: str
     is_active: bool
     created_at: datetime

@@ -17,12 +17,13 @@ class UploadTokenRequest(BaseModel):
 class RequestLinkInput(BaseModel):
     """Body for POST /api/auth/request-link.
 
-    `code` is only required to create a new account (testing-phase invite
-    gate); existing users may omit it.
+    `code` and `handle` are only required to create a new account (the
+    invite gate and the public namespace name); existing users omit both.
     """
 
     email: EmailStr
     code: str | None = None
+    handle: str | None = None
 
 
 class VerifyInput(BaseModel):

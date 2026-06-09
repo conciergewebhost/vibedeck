@@ -76,7 +76,13 @@ class TestUploadSecurity(unittest.TestCase):
 
     def _auth(self, email):
         db = self.Session()
-        db.add(User(email=email, hashed_password=hash_password("x")))
+        db.add(
+            User(
+                email=email,
+                handle=email.split("@", 1)[0],
+                hashed_password=hash_password("x"),
+            )
+        )
         db.commit()
         db.close()
         return {"Authorization": f"Bearer {create_access_token(subject=email)}"}
@@ -95,13 +101,16 @@ class TestUploadSecurity(unittest.TestCase):
 
     # Regular users create via /api/decks/mine; the guards live in
     # create_user_deck, so they apply on that path too.
-    def test_mine_blocks_cross_user_overwrite(self):
+    def test_same_identity_lands_in_separate_user_spaces(self):
+        # Per-user spaces: both users may hold "shared/Shared Title"; each
+        # gets their own file under their handle dir — no overwrite, no 409.
         a = self._auth("a@e.com")
         b = self._auth("b@e.com")
         self.assertEqual(self._mine(DECK, a).status_code, 201)
-        # B creates a deck with the same topic+title → same filename → must be
-        # rejected, not silently overwrite A's deck.
-        self.assertEqual(self._mine(DECK, b).status_code, 409)
+        self.assertEqual(self._mine(DECK, b).status_code, 201)
+        upload_dir = Path(settings.UPLOAD_DIR)
+        self.assertTrue((upload_dir / "a" / "shared__shared-title.md").exists())
+        self.assertTrue((upload_dir / "b" / "shared__shared-title.md").exists())
 
     def test_mine_rejects_code(self):
         a = self._auth("a@e.com")

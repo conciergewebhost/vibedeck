@@ -48,6 +48,23 @@ const allowSignup = meta?.allow_public_signup ?? true;
             autocomplete="off"
             placeholder="Leave blank if you already have an account"
           />
+
+          <label class="login__label" for="handle">Handle <span class="login__hint">(new accounts only)</span></label>
+          <input
+            class="login__input"
+            id="handle"
+            type="text"
+            data-handle
+            autocomplete="off"
+            pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]"
+            minlength="2"
+            maxlength="63"
+            placeholder="your public name, e.g. alice-w"
+          />
+          <p class="login__fieldnote">
+            Your handle is your public address here — lowercase letters,
+            numbers, and hyphens. It can't be changed later.
+          </p>
         </>
       )}
 
@@ -76,6 +93,8 @@ const allowSignup = meta?.allow_public_signup ?? true;
       e.preventDefault();
       const email = $<HTMLInputElement>("[data-email]")?.value.trim() ?? "";
       const code = $<HTMLInputElement>("[data-code]")?.value.trim() ?? "";
+      const handle =
+        $<HTMLInputElement>("[data-handle]")?.value.trim().toLowerCase() ?? "";
       if (!email) return;
 
       if (btn) btn.disabled = true;
@@ -83,7 +102,7 @@ const allowSignup = meta?.allow_public_signup ?? true;
         const res = await fetch("/api/auth/request-link", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, code: code || null }),
+          body: JSON.stringify({ email, code: code || null, handle: handle || null }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -134,6 +153,12 @@ const allowSignup = meta?.allow_public_signup ?? true;
   }
   .login__hint {
     font-style: italic;
+  }
+  .login__fieldnote {
+    margin: 0.25rem 0 0;
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+    line-height: 1.4;
   }
   .login__input {
     padding: 0.65rem 0.8rem;
