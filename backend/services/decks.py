@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from config import settings
 from models import Deck, Keyword, ModerationEvent, Topic, User, deck_keywords
@@ -316,6 +316,7 @@ def _public_deck_item(d: Deck) -> PublicDeckItem:
         card_count=d.card_count,
         url=deck_url(d),
         owner_handle=d.owner.handle if d.owner else None,
+        keywords=[k.value for k in d.keywords],
         created_at=d.created_at,
         updated_at=d.updated_at,
     )
@@ -333,7 +334,7 @@ def list_public_decks(db: Session) -> list[PublicDeckItem]:
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
         .join(User, Deck.owner_id == User.id)
-        .options(joinedload(Deck.owner))
+        .options(joinedload(Deck.owner), selectinload(Deck.keywords))
         .where(
             Deck.visibility == "public",
             Deck.moderation_status == "approved",
@@ -350,7 +351,7 @@ def list_decks_by_handle(db: Session, handle: str) -> list[PublicDeckItem]:
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
         .join(User, Deck.owner_id == User.id)
-        .options(joinedload(Deck.owner))
+        .options(joinedload(Deck.owner), selectinload(Deck.keywords))
         .where(
             User.handle == handle,
             User.is_active,

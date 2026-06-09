@@ -98,6 +98,7 @@ class PublicDeckItem(BaseModel):
     card_count: int
     url: str
     owner_handle: str | None = None
+    keywords: list[str] = []  # for the library's keyword filter bar
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

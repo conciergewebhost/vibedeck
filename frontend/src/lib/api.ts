@@ -81,6 +81,7 @@ export interface PublicDeckItem {
   card_count: number;
   url: string;
   owner_handle: string | null;
+  keywords: string[];
   created_at: string | null;
   updated_at: string | null;
 }

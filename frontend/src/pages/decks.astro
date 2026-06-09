@@ -12,11 +12,22 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
 import { fetchMeta, fetchPublicDecks } from "../lib/api";
 
-const decks = (await fetchPublicDecks()) ?? [];
+const allDecks = (await fetchPublicDecks()) ?? [];
 const meta = await fetchMeta().catch(() => null);
 // Per-user spaces: attribute each topic group to its author (two owners can
 // have same-named topics, so the group key includes the owner).
 const userSpaces = meta?.user_spaces_enabled ?? false;
+
+// Single-keyword filter (?kw=…): the filter bar is built from ALL decks'
+// keywords (count-ordered) and the grid narrows to matching decks.
+const kw = Astro.url.searchParams.get("kw");
+const kwCounts = new Map<string, number>();
+for (const d of allDecks)
+  for (const k of d.keywords) kwCounts.set(k, (kwCounts.get(k) ?? 0) + 1);
+const keywordBar = [...kwCounts.entries()].sort(
+  (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+);
+const decks = kw ? allDecks.filter((d) => d.keywords.includes(kw)) : allDecks;
 
 // Group decks by owner+topic, preserving the API's order.
 type Group = {
@@ -54,9 +65,32 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
       <p class="decks__tag">Browse the library, grouped by topic.</p>
     </header>
 
+    {keywordBar.length > 0 && (
+      <nav class="kwbar" aria-label="Filter by keyword">
+        {keywordBar.map(([k, n]) => (
+          <a
+            class={k === kw ? "kw__link kw__link--active" : "kw__link"}
+            href={k === kw ? "/decks" : `/decks?kw=${encodeURIComponent(k)}`}
+          >
+            {k} <span class="kw__count">{n}</span>
+          </a>
+        ))}
+      </nav>
+    )}
+    {kw && (
+      <p class="decks__filter">
+        {decks.length} deck{decks.length === 1 ? "" : "s"} tagged “{kw}” ·
+        <a href="/decks">× show all</a>
+      </p>
+    )}
+
     {
       groups.length === 0 ? (
-        <p class="decks__empty">No decks yet.</p>
+        kw ? (
+          <p class="decks__empty">No decks tagged “{kw}”. <a href="/decks">Show all decks</a></p>
+        ) : (
+          <p class="decks__empty">No decks yet.</p>
+        )
       ) : (
         groups.map((g) => (
           <section class="topic-group">
@@ -147,7 +181,44 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
   }
   .decks__tag {
     color: var(--vd-text-muted);
-    margin: 0 0 2.5rem;
+    margin: 0 0 1.5rem;
+  }
+  .kwbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 1.5rem;
+  }
+  .kw__link {
+    display: inline-block;
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+    border: 1px solid var(--vd-card-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.7rem;
+    text-decoration: none;
+  }
+  .kw__link:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .kw__link--active {
+    background: var(--vd-accent);
+    border-color: var(--vd-accent);
+    color: var(--vd-bg);
+  }
+  .kw__count {
+    opacity: 0.7;
+    font-size: 0.9em;
+  }
+  .decks__filter {
+    color: var(--vd-text-muted);
+    margin: 0 0 2rem;
+  }
+  .decks__filter a {
+    color: var(--vd-accent);
+    text-decoration: none;
+    margin-left: 0.25rem;
   }
   .decks__empty {
     color: var(--vd-text-muted);

@@ -279,6 +279,10 @@ class TestAuthorEndpoints(_AppTestCase):
         decks = self.client.get("/api/users/alice/decks").json()
         self.assertEqual([d["slug"] for d in decks], ["public-one"])
         self.assertEqual(decks[0]["url"], "/u/alice/tarot/public-one")
+        # Listings carry keywords (powers the library's filter bar).
+        self.assertEqual(decks[0]["keywords"], ["x"])
+        library = self.client.get("/api/decks/public").json()
+        self.assertEqual(library[0]["keywords"], ["x"])
 
         topic = self.client.get("/api/users/alice/topics/tarot").json()
         self.assertEqual([d["slug"] for d in topic["decks"]], ["public-one"])

@@ -16,8 +16,15 @@ if (!data) {
 
 const meta = await fetchMeta().catch(() => null);
 if (meta?.user_spaces_enabled && data.url) {
-  return Astro.redirect(data.url, 301);
+  // Preserve the query string so /{topic}?kw=… filters after the redirect.
+  return Astro.redirect(data.url + Astro.url.search, 301);
 }
+
+// Single-keyword filter: /{topic}?kw={keyword}. Chips are links; the active
+// chip links back to the bare path (click again to clear).
+const kw = Astro.url.searchParams.get("kw");
+const decks = kw ? data.decks.filter((d) => d.keywords.includes(kw)) : data.decks;
+const basePath = Astro.url.pathname;
 ---
 
 <BaseLayout title={`${data.display_name} — Vibedeck`} theme={data.theme ?? undefined}>
@@ -25,13 +32,23 @@ if (meta?.user_spaces_enabled && data.url) {
     <a class="topic__back" href="/decks">‹ All decks</a>
     <h1>{data.display_name}</h1>
     {data.description && <p class="topic__desc">{data.description}</p>}
+    {kw && (
+      <p class="topic__filter">
+        {decks.length} deck{decks.length === 1 ? "" : "s"} tagged “{kw}” ·
+        <a href={basePath}>× show all</a>
+      </p>
+    )}
 
     {
-      data.decks.length === 0 ? (
-        <p>No decks in this topic yet.</p>
+      decks.length === 0 ? (
+        kw ? (
+          <p>No decks tagged “{kw}”. <a href={basePath}>Show all decks</a></p>
+        ) : (
+          <p>No decks in this topic yet.</p>
+        )
       ) : (
         <ul class="deck-list">
-          {data.decks.map((d) => (
+          {decks.map((d) => (
             <li class="deck-card">
               <a href={d.url}>
                 <h2>{d.title}</h2>
@@ -39,14 +56,21 @@ if (meta?.user_spaces_enabled && data.url) {
                 <p class="deck-card__meta">
                   {d.author} · {d.card_count} card{d.card_count === 1 ? "" : "s"}
                 </p>
-                {d.keywords.length > 0 && (
-                  <ul class="kw">
-                    {d.keywords.map((k) => (
-                      <li>{k}</li>
-                    ))}
-                  </ul>
-                )}
               </a>
+              {d.keywords.length > 0 && (
+                <ul class="kw">
+                  {d.keywords.map((k) => (
+                    <li>
+                      <a
+                        class={k === kw ? "kw__link kw__link--active" : "kw__link"}
+                        href={k === kw ? basePath : `${basePath}?kw=${encodeURIComponent(k)}`}
+                      >
+                        {k}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -71,6 +95,15 @@ if (meta?.user_spaces_enabled && data.url) {
     color: var(--vd-text-muted);
     margin: 0 0 2rem;
   }
+  .topic__filter {
+    color: var(--vd-text-muted);
+    margin: -1rem 0 1.5rem;
+  }
+  .topic__filter a {
+    color: var(--vd-accent);
+    text-decoration: none;
+    margin-left: 0.25rem;
+  }
   .deck-list {
     list-style: none;
     margin: 0;
@@ -78,17 +111,21 @@ if (meta?.user_spaces_enabled && data.url) {
     display: grid;
     gap: 1rem;
   }
-  .deck-card a {
-    display: block;
+  /* The card box wraps the link AND the keyword chips (chips are their own
+     links now — anchors can't nest). */
+  .deck-card {
     padding: 1.25rem 1.5rem;
     border: 1px solid var(--vd-card-border);
     border-radius: var(--vd-radius);
     background: var(--vd-card-bg);
+  }
+  .deck-card:hover {
+    border-color: var(--vd-accent);
+  }
+  .deck-card > a {
+    display: block;
     color: inherit;
     text-decoration: none;
-  }
-  .deck-card a:hover {
-    border-color: var(--vd-accent);
   }
   .deck-card h2 {
     margin: 0 0 0.4rem;
@@ -109,11 +146,22 @@ if (meta?.user_spaces_enabled && data.url) {
     flex-wrap: wrap;
     gap: 0.4rem;
   }
-  .kw li {
+  .kw__link {
+    display: inline-block;
     font-size: 0.75rem;
     color: var(--vd-text-muted);
     border: 1px solid var(--vd-card-border);
     border-radius: 999px;
     padding: 0.15rem 0.6rem;
+    text-decoration: none;
+  }
+  .kw__link:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .kw__link--active {
+    background: var(--vd-accent);
+    border-color: var(--vd-accent);
+    color: var(--vd-bg);
   }
 </style>
