@@ -24,6 +24,7 @@ from services.indexing import (
 from services.moderation import moderate_deck
 from services.parser import ParsedDeck, parse_deck
 from services.themes import get_user_theme_css
+from services.urls import deck_url
 
 
 class DeckConflict(Exception):
@@ -140,11 +141,37 @@ def _apply_moderation(deck: Deck, status: str, reasons: str | None) -> None:
 
 
 def _resolve_deck(db: Session, topic_slug: str, deck_slug: str) -> Deck | None:
-    """Look up a Deck by its URL slugs, or None."""
-    return db.scalar(
+    """Look up a Deck by FLAT slugs — only when the match is unambiguous.
+
+    Topics are owner-scoped, so several owners can hold the same
+    (topic_slug, deck_slug) pair. A flat lookup is only meaningful when
+    exactly one deck matches; on 0 or ≥2 matches it returns None (a silent
+    first-match would serve an arbitrary owner's deck). Flat URLs are
+    canonical in standalone (single owner → always unique) and act as
+    legacy redirects in the server edition.
+    """
+    matches = db.scalars(
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
         .where(Topic.slug == topic_slug, Deck.slug == deck_slug)
+        .limit(2)
+    ).all()
+    return matches[0] if len(matches) == 1 else None
+
+
+def _resolve_deck_namespaced(
+    db: Session, handle: str, topic_slug: str, deck_slug: str
+) -> Deck | None:
+    """Look up a Deck by its canonical /u/{handle}/{topic}/{deck} identity."""
+    return db.scalar(
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .join(User, Deck.owner_id == User.id)
+        .where(
+            User.handle == handle,
+            Topic.slug == topic_slug,
+            Deck.slug == deck_slug,
+        )
     )
 
 
@@ -168,9 +195,18 @@ def _resolve_owned_deck(
     )
 
 
-def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
-    """Return deck metadata + freshly parsed cards, or None if not found."""
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+def get_deck(
+    db: Session, topic_slug: str, deck_slug: str, handle: str | None = None
+) -> DeckDetail | None:
+    """Return deck metadata + freshly parsed cards, or None if not found.
+
+    With `handle`, resolves in that owner's namespace (the canonical
+    /u/{handle}/… reader); without, resolves flat — unique matches only.
+    """
+    if handle is not None:
+        deck = _resolve_deck_namespaced(db, handle, topic_slug, deck_slug)
+    else:
+        deck = _resolve_deck(db, topic_slug, deck_slug)
     if deck is None:
         return None
 
@@ -193,10 +229,14 @@ def get_deck(db: Session, topic_slug: str, deck_slug: str) -> DeckDetail | None:
         visibility=deck.visibility,
         keywords=[k.value for k in deck.keywords],
         cards=cards,
+        url=deck_url(deck),
+        owner_handle=deck.owner.handle if deck.owner else None,
     )
 
 
-def get_deck_theme_css(db: Session, topic_slug: str, deck_slug: str) -> str | None:
+def get_deck_theme_css(
+    db: Session, topic_slug: str, deck_slug: str, handle: str | None = None
+) -> str | None:
     """CSS of the custom theme a deck uses, or None.
 
     Resolves the deck → its owner + `theme` slug → that owner's theme CSS, so a
@@ -205,8 +245,11 @@ def get_deck_theme_css(db: Session, topic_slug: str, deck_slug: str) -> str | No
     CSS was safety-validated when the theme was created; only a theme actually
     attached to a deck becomes visible this way.
     """
-    deck = _resolve_deck(db, topic_slug, deck_slug)
-    if deck is None or deck.owner_id is None:
+    if handle is not None:
+        deck = _resolve_deck_namespaced(db, handle, topic_slug, deck_slug)
+    else:
+        deck = _resolve_deck(db, topic_slug, deck_slug)
+    if deck is None:
         return None
     # Not publicly viewable (private or quarantined) → no public CSS.
     if deck.visibility == "private" or deck.moderation_status == "flagged":
@@ -224,13 +267,15 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
     ).all()
     return [
         AdminDeckItem(
+            id=d.id,
             topic=d.topic.slug,
             slug=d.slug,
             title=d.title,
             author=d.author,
             card_count=d.card_count,
             filename=d.filename,
-            url=f"/{d.topic.slug}/{d.slug}",
+            url=deck_url(d),
+            owner_handle=d.owner.handle if d.owner else None,
             visibility=d.visibility,
             created_at=d.created_at,
             updated_at=d.updated_at,
@@ -242,32 +287,55 @@ def list_all_decks(db: Session) -> list[AdminDeckItem]:
     ]
 
 
+def _public_deck_item(d: Deck) -> PublicDeckItem:
+    return PublicDeckItem(
+        topic=d.topic.slug,
+        topic_name=d.topic.display_name,
+        slug=d.slug,
+        title=d.title,
+        author=d.author,
+        card_count=d.card_count,
+        url=deck_url(d),
+        owner_handle=d.owner.handle if d.owner else None,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
+    )
+
+
 def list_public_decks(db: Session) -> list[PublicDeckItem]:
     """Public decks for the library grid, with their topic display name.
 
     Filtered to visibility == 'public'; unlisted and private decks are kept
     out of all listings, as are flagged decks awaiting moderation review.
+    Ordered with the owner first so two owners' same-named topics don't
+    interleave in the grouped library view.
     """
     decks = db.scalars(
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
+        .join(User, Deck.owner_id == User.id)
+        .options(joinedload(Deck.owner))
         .where(Deck.visibility == "public", Deck.moderation_status == "approved")
+        .order_by(User.handle, Topic.display_name, Deck.title)
+    ).all()
+    return [_public_deck_item(d) for d in decks]
+
+
+def list_decks_by_handle(db: Session, handle: str) -> list[PublicDeckItem]:
+    """An author's public+approved decks for their /u/{handle} page."""
+    decks = db.scalars(
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .join(User, Deck.owner_id == User.id)
+        .options(joinedload(Deck.owner))
+        .where(
+            User.handle == handle,
+            Deck.visibility == "public",
+            Deck.moderation_status == "approved",
+        )
         .order_by(Topic.display_name, Deck.title)
     ).all()
-    return [
-        PublicDeckItem(
-            topic=d.topic.slug,
-            topic_name=d.topic.display_name,
-            slug=d.slug,
-            title=d.title,
-            author=d.author,
-            card_count=d.card_count,
-            url=f"/{d.topic.slug}/{d.slug}",
-            created_at=d.created_at,
-            updated_at=d.updated_at,
-        )
-        for d in decks
-    ]
+    return [_public_deck_item(d) for d in decks]
 
 
 def list_flagged_decks(db: Session) -> list[AdminDeckItem]:
@@ -281,13 +349,15 @@ def list_flagged_decks(db: Session) -> list[AdminDeckItem]:
     ).all()
     return [
         AdminDeckItem(
+            id=d.id,
             topic=d.topic.slug,
             slug=d.slug,
             title=d.title,
             author=d.author,
             card_count=d.card_count,
             filename=d.filename,
-            url=f"/{d.topic.slug}/{d.slug}",
+            url=deck_url(d),
+            owner_handle=d.owner.handle if d.owner else None,
             visibility=d.visibility,
             created_at=d.created_at,
             updated_at=d.updated_at,
@@ -300,27 +370,41 @@ def list_flagged_decks(db: Session) -> list[AdminDeckItem]:
     ]
 
 
-def get_deck_source_by_slugs(
-    db: Session, topic_slug: str, deck_slug: str
-) -> str | None:
+# ── Admin operations by deck id ────────────────────────────────────────────
+# Admin actions key on the deck row id: it is collision-proof under per-user
+# spaces (flat slugs can be ambiguous) and the admin UI already holds full
+# deck objects from the list endpoints.
+
+
+def get_deck_source_by_id(db: Session, deck_id: int) -> str | None:
     """Raw markdown of any deck regardless of visibility/moderation state,
     or None if it doesn't exist. For the admin review queue (the public
     reader withholds quarantined decks, so the admin reads the source)."""
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+    deck = db.get(Deck, deck_id)
     if deck is None:
         return None
     return (Path(settings.UPLOAD_DIR) / deck.filename).read_text(encoding="utf-8")
 
 
-def approve_deck_by_slugs(db: Session, topic_slug: str, deck_slug: str) -> bool:
+def approve_deck_by_id(db: Session, deck_id: int) -> bool:
     """Admin-approve a flagged deck: it becomes visible per its own
     visibility setting. Returns False if the deck doesn't exist. Idempotent
     on an already-approved deck. Caller commits."""
-    deck = _resolve_deck(db, topic_slug, deck_slug)
+    deck = db.get(Deck, deck_id)
     if deck is None:
         return False
     _apply_moderation(deck, "approved", None)
     db.flush()
+    return True
+
+
+def delete_deck_by_id(db: Session, deck_id: int) -> bool:
+    """Delete any deck by row id (admin). Returns False if not found.
+    The caller owns the commit."""
+    deck = db.get(Deck, deck_id)
+    if deck is None:
+        return False
+    _delete_deck(db, deck)
     return True
 
 
@@ -348,18 +432,21 @@ def list_user_decks(db: Session, owner_id: int) -> list[AdminDeckItem]:
     decks = db.scalars(
         select(Deck)
         .join(Topic, Deck.topic_id == Topic.id)
+        .options(joinedload(Deck.owner))
         .where(Deck.owner_id == owner_id)
         .order_by(Topic.slug, Deck.slug)
     ).all()
     return [
         AdminDeckItem(
+            id=d.id,
             topic=d.topic.slug,
             slug=d.slug,
             title=d.title,
             author=d.author,
             card_count=d.card_count,
             filename=d.filename,
-            url=f"/{d.topic.slug}/{d.slug}",
+            url=deck_url(d),
+            owner_handle=d.owner.handle if d.owner else None,
             visibility=d.visibility,
             created_at=d.created_at,
             updated_at=d.updated_at,

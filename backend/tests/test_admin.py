@@ -108,7 +108,7 @@ class TestAdminAuthz(_Base):
         )
         self.assertEqual(self.client.get("/api/decks", headers=u).status_code, 403)
         self.assertEqual(
-            self.client.delete("/api/decks/x/y", headers=u).status_code, 403
+            self.client.delete("/api/admin/decks/1", headers=u).status_code, 403
         )
         self.assertEqual(
             self.client.post(

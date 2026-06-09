@@ -46,38 +46,51 @@ def list_flagged(
     return decks_service.list_flagged_decks(db)
 
 
-@router.post(
-    "/decks/{topic_slug}/{deck_slug}/approve",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+# Admin deck actions key on the deck row id — collision-proof under
+# per-user spaces (flat topic/deck slugs can be ambiguous across owners),
+# and the admin UI already holds full deck objects from the list endpoints.
+
+
+@router.post("/decks/{deck_id}/approve", status_code=status.HTTP_204_NO_CONTENT)
 def approve_deck(
-    topic_slug: str,
-    deck_slug: str,
+    deck_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ) -> Response:
     """Approve a flagged deck — it becomes visible per its visibility setting.
 
-    Rejecting a deck is the existing DELETE /api/decks/{topic}/{slug}.
+    Rejecting a deck is DELETE /api/admin/decks/{deck_id}.
     """
-    if not decks_service.approve_deck_by_slugs(db, topic_slug, deck_slug):
+    if not decks_service.approve_deck_by_id(db, deck_id):
         raise HTTPException(status_code=404, detail="Deck not found")
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/decks/{topic_slug}/{deck_slug}/source")
+@router.get("/decks/{deck_id}/source")
 def get_deck_source(
-    topic_slug: str,
-    deck_slug: str,
+    deck_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ) -> Response:
     """Raw markdown of any deck — for reviewing quarantined content."""
-    markdown = decks_service.get_deck_source_by_slugs(db, topic_slug, deck_slug)
+    markdown = decks_service.get_deck_source_by_id(db, deck_id)
     if markdown is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     return Response(content=markdown, media_type="text/markdown")
+
+
+@router.delete("/decks/{deck_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_deck(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> Response:
+    """Delete any deck: file + DB rows + orphan prune (admin only)."""
+    if not decks_service.delete_deck_by_id(db, deck_id):
+        raise HTTPException(status_code=404, detail="Deck not found")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/moderation-summary", response_model=ModerationSummary)

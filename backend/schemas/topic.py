@@ -14,6 +14,8 @@ class TopicSummary(BaseModel):
     theme: str | None = None
     deck_count: int
     top_keywords: list[str]
+    url: str = ""  # canonical topic path (edition-shaped)
+    owner_handle: str | None = None
 
 
 class TopicDetail(BaseModel):
@@ -24,3 +26,5 @@ class TopicDetail(BaseModel):
     description: str | None = None
     theme: str | None = None
     decks: list[DeckListItem]
+    url: str = ""  # canonical topic path (edition-shaped)
+    owner_handle: str | None = None

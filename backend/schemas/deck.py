@@ -50,6 +50,7 @@ class DeckListItem(BaseModel):
     theme: str
     keywords: list[str]
     card_count: int
+    url: str = ""  # canonical reader path (edition-shaped; see services/urls.py)
 
 
 class DeckDetail(BaseModel):
@@ -64,6 +65,10 @@ class DeckDetail(BaseModel):
     visibility: str = "public"
     keywords: list[str]
     cards: list[Card]
+    # Canonical reader path + owner namespace; empty/None for the sandbox
+    # preview, which never touches a deck row.
+    url: str = ""
+    owner_handle: str | None = None
 
 
 class UploadResult(BaseModel):
@@ -90,6 +95,7 @@ class PublicDeckItem(BaseModel):
     author: str
     card_count: int
     url: str
+    owner_handle: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -101,6 +107,7 @@ class AdminDeckItem(BaseModel):
     the deterministically-derived filename — no owner or path info.
     """
 
+    id: int = 0  # deck row id — the collision-proof key for admin actions
     topic: str  # topic slug
     slug: str
     title: str
@@ -108,6 +115,7 @@ class AdminDeckItem(BaseModel):
     card_count: int
     filename: str
     url: str
+    owner_handle: str | None = None
     visibility: str = "public"
     created_at: datetime | None = None
     updated_at: datetime | None = None

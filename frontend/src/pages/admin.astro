@@ -114,6 +114,7 @@ import DeckModal from "../components/DeckModal.astro";
   const TOKEN_KEY = "vd_admin_jwt";
 
   type AdminDeck = {
+    id: number;
     topic: string;
     slug: string;
     title: string;
@@ -267,10 +268,11 @@ import DeckModal from "../components/DeckModal.astro";
   async function deleteDeck(d: AdminDeck, reload: () => void) {
     if (!confirm(`Delete "${d.title}" (/${d.topic}/${d.slug})? This removes the file too.`))
       return;
-    const res = await fetch(
-      `/api/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
-      { method: "DELETE", headers: authHeaders() },
-    );
+    // Admin actions key on the deck id — slugs can collide across owners.
+    const res = await fetch(`/api/admin/decks/${d.id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
     if (res.status === 401) return signOut();
     if (res.ok || res.status === 404) reload();
   }
@@ -439,10 +441,9 @@ import DeckModal from "../components/DeckModal.astro";
           view.textContent = "View source";
           return;
         }
-        const res = await fetch(
-          `/api/admin/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}/source`,
-          { headers: authHeaders() },
-        );
+        const res = await fetch(`/api/admin/decks/${d.id}/source`, {
+          headers: authHeaders(),
+        });
         if (res.status === 401) return signOut();
         source.textContent = res.ok ? await res.text() : "Couldn't load the deck source.";
         source.hidden = false;
@@ -454,10 +455,10 @@ import DeckModal from "../components/DeckModal.astro";
       approve.type = "button";
       approve.textContent = "Approve";
       approve.addEventListener("click", async () => {
-        const res = await fetch(
-          `/api/admin/decks/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}/approve`,
-          { method: "POST", headers: authHeaders() },
-        );
+        const res = await fetch(`/api/admin/decks/${d.id}/approve`, {
+          method: "POST",
+          headers: authHeaders(),
+        });
         if (res.status === 401) return signOut();
         if (res.ok || res.status === 404) loadFlagged();
       });

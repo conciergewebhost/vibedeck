@@ -117,6 +117,14 @@ class Settings(BaseSettings):
         return self.is_server
 
     @property
+    def user_spaces_enabled(self) -> bool:
+        """Server-only: namespaced /u/{handle}/… canonical URLs. Standalone
+        keeps flat /{topic}/{deck} URLs (one owner — no ambiguity). The data
+        model is identical in both editions; only URL shape differs (see
+        services/urls.py)."""
+        return self.is_server
+
+    @property
     def admin_digest_email(self) -> str:
         """Recipient of the daily moderation digest; defaults to the owner."""
         return self.ADMIN_DIGEST_EMAIL or self.UPLOAD_OWNER_EMAIL

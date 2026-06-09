@@ -39,6 +39,7 @@ from services.decks import (
 )
 from services.parser import DeckParseError, parse_deck
 from services.ratelimit import SlidingWindowLimiter, client_ip
+from services.urls import deck_url
 
 router = APIRouter()
 
@@ -107,7 +108,7 @@ async def upload_deck(
         slug=deck.slug,
         title=deck.title,
         card_count=deck.card_count,
-        url=f"/{deck.topic.slug}/{deck.slug}",
+        url=deck_url(deck),
     )
 
 
@@ -216,7 +217,7 @@ def create_my_deck(
         slug=deck.slug,
         title=deck.title,
         card_count=deck.card_count,
-        url=f"/{deck.topic.slug}/{deck.slug}",
+        url=deck_url(deck),
         moderation_status=deck.moderation_status,
     )
 
@@ -273,7 +274,7 @@ def update_my_deck(
         slug=deck.slug,
         title=deck.title,
         card_count=deck.card_count,
-        url=f"/{deck.topic.slug}/{deck.slug}",
+        url=deck_url(deck),
         moderation_status=deck.moderation_status,
     )
 
@@ -295,6 +296,36 @@ def delete_my_deck(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ── Reader endpoints ───────────────────────────────────────────────────────
+# The namespaced /u/{handle}/… routes are canonical (always available; the
+# server edition links them everywhere). The flat /{topic}/{deck} routes
+# resolve ONLY unambiguous matches: canonical in standalone (single owner),
+# legacy-link support in the server edition. Registered namespaced-first,
+# mirroring the /mine convention above.
+
+
+@router.get("/u/{handle}/{topic_slug}/{deck_slug}/theme.css")
+def get_deck_theme_namespaced(
+    handle: str, topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
+) -> Response:
+    """The CSS of a deck's custom theme, resolved in its owner's namespace."""
+    css = decks_service.get_deck_theme_css(db, topic_slug, deck_slug, handle=handle)
+    if css is None:
+        raise HTTPException(status_code=404, detail="No custom theme for this deck")
+    return Response(content=css, media_type="text/css")
+
+
+@router.get("/u/{handle}/{topic_slug}/{deck_slug}", response_model=DeckDetail)
+def get_deck_namespaced(
+    handle: str, topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
+) -> DeckDetail:
+    """Deck metadata + parsed cards, resolved in its owner's namespace."""
+    deck = decks_service.get_deck(db, topic_slug, deck_slug, handle=handle)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return deck
+
+
 @router.get("/{topic_slug}/{deck_slug}/theme.css")
 def get_deck_theme(
     topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
@@ -302,9 +333,8 @@ def get_deck_theme(
     """The CSS of a deck's custom theme, for any reader (no auth).
 
     Lets the reader inline a deck's custom theme server-side so every viewer
-    sees it — not just the signed-in owner. Returns 404 for built-in themes or
-    decks with no matching custom theme. (When per-deck visibility lands, this
-    should honour it; today all decks are public.)
+    sees it — not just the signed-in owner. Returns 404 for built-in themes,
+    decks with no matching custom theme, or an ambiguous flat match.
     """
     css = decks_service.get_deck_theme_css(db, topic_slug, deck_slug)
     if css is None:
@@ -316,23 +346,12 @@ def get_deck_theme(
 def get_deck(
     topic_slug: str, deck_slug: str, db: Session = Depends(get_db)
 ) -> DeckDetail:
-    """Return deck metadata + parsed cards for the reader."""
+    """Deck metadata + parsed cards — flat lookup, unique matches only.
+
+    The response carries the canonical `url`; in the server edition the SSR
+    page uses it to 301 legacy flat links to their /u/{handle}/… home.
+    """
     deck = decks_service.get_deck(db, topic_slug, deck_slug)
     if deck is None:
         raise HTTPException(status_code=404, detail="Deck not found")
     return deck
-
-
-@router.delete("/{topic_slug}/{deck_slug}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_deck(
-    topic_slug: str,
-    deck_slug: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),  # admin only (any deck)
-) -> Response:
-    """Delete any deck: file + DB rows + orphan prune (admin only)."""
-    deleted = decks_service.delete_deck_by_slugs(db, topic_slug, deck_slug)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Deck not found")
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

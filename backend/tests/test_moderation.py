@@ -245,15 +245,14 @@ class TestAdminReviewQueue(ModeratedAppTestCase):
         self.assertEqual(len(queue), 1)
         self.assertEqual(queue[0]["owner_email"], "a@e.com")
         self.assertIn("review", queue[0]["moderation_reasons"])
+        deck_id = queue[0]["id"]
 
         # Admin can read the quarantined source even though the reader 404s.
-        src = self.client.get("/api/admin/decks/testing/test-deck/source", headers=owner)
+        src = self.client.get(f"/api/admin/decks/{deck_id}/source", headers=owner)
         self.assertEqual(src.status_code, 200)
         self.assertIn("buy now", src.text)
 
-        res = self.client.post(
-            "/api/admin/decks/testing/test-deck/approve", headers=owner
-        )
+        res = self.client.post(f"/api/admin/decks/{deck_id}/approve", headers=owner)
         self.assertEqual(res.status_code, 204)
         self.assertEqual(self.client.get("/api/decks/testing/test-deck").status_code, 200)
         self.assertEqual(self.client.get("/api/admin/flagged", headers=owner).json(), [])

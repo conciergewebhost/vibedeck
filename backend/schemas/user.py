@@ -13,3 +13,11 @@ class UserOut(BaseModel):
     handle: str
     is_active: bool
     created_at: datetime
+
+
+class PublicUserProfile(BaseModel):
+    """An author's public profile (/u/{handle}) — no email or account state."""
+
+    handle: str
+    deck_count: int  # public + approved decks only
+    created_at: datetime

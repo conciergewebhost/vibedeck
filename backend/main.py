@@ -67,4 +67,5 @@ def meta() -> dict[str, object]:
         "moderation_enabled": settings.moderation_enabled,
         "visibility_enabled": settings.visibility_enabled,
         "quotas_enabled": settings.quotas_enabled,
+        "user_spaces_enabled": settings.user_spaces_enabled,
     }
