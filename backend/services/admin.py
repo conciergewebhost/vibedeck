@@ -113,6 +113,11 @@ def moderation_summary(db: Session) -> ModerationSummary:
         .select_from(Report)
         .where(Report.created_at >= since)
     )
+    signups_24h = db.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.created_at >= since)
+    )
 
     return ModerationSummary(
         queue_size=queue_size or 0,
@@ -120,6 +125,7 @@ def moderation_summary(db: Session) -> ModerationSummary:
         flagged_24h=_events_since("flag"),
         open_reports=open_reports or 0,
         reports_24h=reports_24h or 0,
+        signups_24h=signups_24h or 0,
     )
 
 

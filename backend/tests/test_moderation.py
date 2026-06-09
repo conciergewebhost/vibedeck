@@ -267,6 +267,8 @@ class TestAdminReviewQueue(ModeratedAppTestCase):
         self._mine(_markdown("limited offer, buy now"), a)
         summary = self.client.get("/api/admin/moderation-summary", headers=owner).json()
         self.assertEqual(summary["queue_size"], 1)
+        # Both accounts were created moments ago → counted as new signups.
+        self.assertEqual(summary["signups_24h"], 2)
 
 
 class TestStandaloneSkipsModeration(ModeratedAppTestCase):

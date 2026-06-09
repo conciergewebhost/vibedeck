@@ -75,6 +75,7 @@ def send_moderation_digest(
     flagged_24h: int,
     open_reports: int = 0,
     reports_24h: int = 0,
+    signups_24h: int = 0,
 ) -> None:
     """Email the daily moderation digest to the admin.
 
@@ -108,6 +109,8 @@ def send_moderation_digest(
         <td style="padding:0.3rem 0;font-weight:700">{flagged_24h}</td></tr>
     <tr><td style="padding:0.3rem 1rem 0.3rem 0">Reports filed in the last 24&nbsp;h</td>
         <td style="padding:0.3rem 0;font-weight:700">{reports_24h}</td></tr>
+    <tr><td style="padding:0.3rem 1rem 0.3rem 0">New accounts in the last 24&nbsp;h</td>
+        <td style="padding:0.3rem 0;font-weight:700">{signups_24h}</td></tr>
   </table>
   <p style="margin:0 0 1.5rem">
     <a href="{queue_url}"

@@ -27,6 +27,7 @@ class ModerationSummary(BaseModel):
     flagged_24h: int  # decks newly quarantined in the last 24 hours
     open_reports: int = 0  # decks with at least one standing reader report
     reports_24h: int = 0  # report rows filed in the last 24 hours
+    signups_24h: int = 0  # accounts created in the last 24 hours
 
 
 class SignupSettings(BaseModel):

@@ -38,11 +38,13 @@ def main() -> int:
         flagged_24h=summary.flagged_24h,
         open_reports=summary.open_reports,
         reports_24h=summary.reports_24h,
+        signups_24h=summary.signups_24h,
     )
     print(
         f"digest: sent to {to} — queue {summary.queue_size}, "
         f"blocked_24h {summary.blocked_24h}, flagged_24h {summary.flagged_24h}, "
-        f"open_reports {summary.open_reports}, reports_24h {summary.reports_24h}"
+        f"open_reports {summary.open_reports}, reports_24h {summary.reports_24h}, "
+        f"signups_24h {summary.signups_24h}"
     )
     return 0
 
