@@ -274,7 +274,9 @@ Unlisted and private decks are served with `noindex` (and private decks 404 publ
 - [ ] Optional progressive reveal of bullet points (one at a time)
 
 ### Post-v2
-- [ ] Multi-user publishing
+- [x] Multi-user publishing foundation — **per-user spaces**: public handles (chosen at signup),
+      owner-scoped topics, per-owner deck files, server-edition URLs `/u/{handle}/{topic}/{deck}`
+      with author pages (`/u/{handle}`) and 301s from legacy flat URLs. Standalone keeps flat URLs.
 - [ ] Custom card type extensibility
 - [ ] Analytics per deck (views, completion rate)
 - [x] Embeddable single-deck widget (`/embed/{topic}/{deck}` + an "Embed" button in the deck modal)

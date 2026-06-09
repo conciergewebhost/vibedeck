@@ -56,32 +56,32 @@ Already present: accounts, per-user ownership, private themes, admin oversight, 
 rate limiting, upload size caps.
 
 **Gaps to close:**
-- **Content moderation** — required before hosting others' deck text. Already tracked (see `SPEC.md`
-  roadmap + `HANDOFF.md`).
 - **Roles** — "admin" is currently a single owner-email check (`get_current_admin`). A real host
   wants promotable admins/moderators (an `is_admin` column).
 - **Quotas + abuse controls** — per-user deck/storage limits, a report/takedown path, and a user
   ban/deactivate UI (`User.is_active` exists; no admin control surfaces it yet).
 
-**Already closed:** ~~per-deck visibility~~ — `public` / `unlisted` / `private` shipped
-(`Deck.visibility`; built in standalone, applies to both editions).
+**Already closed:**
+- ~~Per-deck visibility~~ — `public` / `unlisted` / `private` shipped (`Deck.visibility`).
+- ~~Content moderation~~ — the algorithmic layer shipped (hybrid auto-block/flag + admin review
+  queue + daily digest; AI second pass still deferred — see `HANDOFF.md`).
+- ~~The namespace rework~~ — **per-user spaces shipped**: users have public handles, topics are
+  owner-scoped (unique per owner), new deck files live under per-owner subdirs (legacy flat files
+  stay valid; `manage.py tidy` is optional housekeeping). Server-edition URLs are
+  `/u/{handle}/{topic}/{deck}` + an author page `/u/{handle}`; legacy flat URLs 301 while
+  unambiguous. **Standalone keeps flat URLs** — the editions share one data model and differ only
+  in URL shape (`services/urls.py`, the single place it's decided).
 
-### ⚠️ The key architectural decision: the content namespace
+### The content namespace — DECIDED AND BUILT: per-user spaces
 
-Today the content model is a **communal shared library**, not **per-user spaces**:
-- Topics are a **global** namespace (one shared `Topic` table / topic index).
-- Deck files are **globally unique**: `deck_filename()` produces `<topic-slug>__<title-slug>.md`, and
-  `create_user_deck` raises `DeckConflict` if another user already owns that name
-  (`backend/services/decks.py`, `services/indexing.py`).
-
-So two different users **cannot** both have "Astrology / Intro," and everyone contributes to one
-shared topic index. That's a perfectly valid product ("a small group curating one library"), but if
-"a variety of users" means **isolated per-user spaces** (URLs like `/u/alice/{topic}/{deck}`, browse
-by author), the topic model and filename scheme need to be **owner-scoped**.
-
-**Decision (made): per-user spaces.** This drives URLs, on-disk filenames, and the topic model, and
-is painful to migrate afterward (URLs break, files move, DB changes), so it is sequenced first within
-the server work — before visibility, roles, moderation, and quotas build on top of it.
+Every user is a namespace owner. `users.handle` (chosen at signup, slug-validated with a reserved
+blocklist in `services/handles.py`; derived from the email local-part for pre-existing accounts) is
+the public URL segment. `topics` are unique per `(owner_id, slug)`; `deck_filename()` derives
+`{handle}/{topic}__{title}.md` for new decks while `Deck.filename` is treated as an opaque relative
+path so legacy flat files never have to move. Flat lookups resolve only unambiguous matches —
+canonical in standalone, 301-redirects in the server edition. Admin deck actions are keyed by deck
+row id (collision-proof). Handles are immutable for now; a rename feature later is cheap because
+nothing but the `users.handle` column carries the name.
 
 ---
 
@@ -98,8 +98,9 @@ the server work — before visibility, roles, moderation, and quotas build on to
 
 ## Readiness checklist
 
-**Server-ready:** content moderation · roles (`is_admin`) · quotas + abuse controls · the namespace
-rework. (Per-deck visibility — done.)
+**Server-ready, still open:** roles (`is_admin`) · quotas + abuse controls · the AI moderation
+second pass. (Done: per-deck visibility · algorithmic content moderation · the per-user-spaces
+namespace rework.)
 
 ---
 

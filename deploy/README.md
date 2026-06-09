@@ -100,6 +100,19 @@ cd .. && alembic upgrade head               # if there are new migrations
 sudo systemctl restart vibedeck-api vibedeck-web
 ```
 
+### Upgrading across the per-user-spaces migration
+
+The `add_user_handles_and_topic_owners` migration gives every existing user a
+**handle** derived from their email local-part (e.g. `alice@example.com` →
+`alice`; numeric suffix on collision). Note for standalone instances: the
+handle appears on the (unlinked) `/u/{handle}` author page, so the email
+local-part becomes technically public — pick a different handle at account
+creation (`manage.py create-user --handle`) if that matters to you. Existing
+deck files are NOT moved; new decks are written under per-owner
+subdirectories, and `python manage.py tidy` (from `backend/`) optionally
+moves legacy flat files to match. URLs only change in the `server` edition
+(`/u/{handle}/…`, with 301s from the old flat URLs).
+
 ## Managing content
 
 Decks are managed from the server (see the root README): drop a `.md` file in
