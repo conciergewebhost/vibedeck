@@ -5,9 +5,12 @@
  * Session-gated client-side (redirects to /login without a session). Lists the
  * user's own decks as thumbnail cards via the shared DeckModal component; each
  * opens the expandable viewer (with owner Edit/Delete). New decks are authored
- * in the in-browser editor (/account/edit). File upload of decks and theme CSS
- * is paused pending content moderation; the "My themes" section only appears to
- * manage themes a user already has.
+ * in the builder/editor — or uploaded as .md files, re-enabled now that the
+ * content/code inspection pipeline exists: uploads are read client-side and
+ * submitted through the same validated portal endpoints, so every problem the
+ * inspectors find (parse errors, unsafe markup, moderation blocks, quotas) is
+ * reported back verbatim. Theme CSS upload likewise goes through
+ * validate_theme_css. Flagged uploads show the in-review notice.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
@@ -23,6 +26,8 @@ import DeckModal from "../components/DeckModal.astro";
       <div class="portal__actions">
         <a class="portal__btn" href="/account/build">+ New deck</a>
         <a class="portal__link" href="/account/edit">write markdown</a>
+        <button class="portal__link" type="button" data-deck-upload-btn>upload .md</button>
+        <input type="file" accept=".md,text/markdown" data-deck-upload hidden />
         <button class="portal__link" type="button" data-logout>Log out</button>
       </div>
     </header>
@@ -32,19 +37,27 @@ import DeckModal from "../components/DeckModal.astro";
       check flagged it for a quick human look. It stays hidden from other
       readers until it's approved — no action needed on your side.
     </p>
+    <p class="portal__err" data-upload-msg role="status" hidden></p>
 
     <ul class="deckgrid" data-deck-list></ul>
 
     <section class="portal__themes">
       <div class="portal__themes-head">
         <h2 class="portal__subhead">My themes</h2>
-        <a class="portal__btn portal__btn--sm" href="/account/theme">+ New theme</a>
+        <div class="portal__themes-actions">
+          <button class="portal__link" type="button" data-theme-upload-btn>upload CSS</button>
+          <input type="file" accept=".css,text/css" data-theme-upload hidden />
+          <a class="portal__btn portal__btn--sm" href="/account/theme">+ New theme</a>
+        </div>
       </div>
       <p class="portal__hint">
-        Build a custom palette and type with the theme builder, then use it by
-        setting <code>theme: its-name</code> in a deck's frontmatter (or pick it
-        in the deck builder). It renders for everyone who reads that deck.
+        Build a custom palette and type with the theme builder — or upload a
+        <code>.css</code> file that defines <code>--vd-*</code> tokens (it's
+        checked for safety on the way in). Use a theme by setting
+        <code>theme: its-name</code> in a deck's frontmatter (or pick it in the
+        deck builder). It renders for everyone who reads that deck.
       </p>
+      <p class="portal__err" data-theme-msg role="status" hidden></p>
       <ul class="portal__theme-list" data-theme-list></ul>
     </section>
   </main>
@@ -164,6 +177,72 @@ import DeckModal from "../components/DeckModal.astro";
     if (res.ok || res.status === 404) loadThemes();
   }
 
+  // ── File uploads ────────────────────────────────────────────
+  // Files are read in the browser and submitted through the same validated
+  // portal endpoints as the editor/builder, so every inspection problem
+  // (parse errors, unsafe markup, moderation blocks, quotas, conflicts)
+  // comes back as a message we can show verbatim.
+
+  function setMsg(sel: string, text: string | null) {
+    const el = $<HTMLElement>(sel);
+    if (!el) return;
+    el.textContent = text ?? "";
+    el.hidden = !text;
+  }
+
+  async function uploadDeckFile(file: File) {
+    setMsg("[data-upload-msg]", `Checking ${file.name}…`);
+    const markdown = await file.text();
+    const res = await fetch("/api/decks/mine", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ markdown }),
+    });
+    if (res.status === 401) return handle401();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg("[data-upload-msg]", `${file.name}: ${data.detail ?? `upload failed (${res.status})`}`);
+      return;
+    }
+    setMsg("[data-upload-msg]", null);
+    if (data.moderation_status === "flagged") {
+      $("[data-notice]")?.removeAttribute("hidden");
+    }
+    loadDecks();
+  }
+
+  async function uploadThemeFile(file: File) {
+    setMsg("[data-theme-msg]", `Checking ${file.name}…`);
+    const css = await file.text();
+    // Theme name from the filename; the backend slugs it for the
+    // frontmatter `theme:` value.
+    const name = file.name.replace(/\.css$/i, "").trim() || file.name;
+    const res = await fetch("/api/themes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ name, css }),
+    });
+    if (res.status === 401) return handle401();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const hint = res.status === 409 ? " Rename the file and try again." : "";
+      setMsg("[data-theme-msg]", `${file.name}: ${data.detail ?? `upload failed (${res.status})`}${hint}`);
+      return;
+    }
+    setMsg("[data-theme-msg]", null);
+    loadThemes();
+  }
+
+  function wireUpload(btnSel: string, inputSel: string, handler: (f: File) => void) {
+    const input = $<HTMLInputElement>(inputSel);
+    $(btnSel)?.addEventListener("click", () => input?.click());
+    input?.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) handler(file);
+      input.value = ""; // allow re-selecting the same file after a fix
+    });
+  }
+
   function initPortal() {
     requireSession();
     $("[data-logout]")?.addEventListener("click", logout);
@@ -173,6 +252,9 @@ import DeckModal from "../components/DeckModal.astro";
       $("[data-notice]")?.removeAttribute("hidden");
       history.replaceState(null, "", "/account");
     }
+
+    wireUpload("[data-deck-upload-btn]", "[data-deck-upload]", uploadDeckFile);
+    wireUpload("[data-theme-upload-btn]", "[data-theme-upload]", uploadThemeFile);
 
     document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
@@ -245,6 +327,18 @@ import DeckModal from "../components/DeckModal.astro";
     color: var(--vd-text);
     font-size: 0.9rem;
     line-height: 1.5;
+  }
+  .portal__err {
+    margin: 0 0 1.25rem;
+    color: #f87171;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .portal__themes-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
   .portal__card--review {
     position: relative;

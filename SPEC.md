@@ -228,7 +228,11 @@ stores the markdown file as the source of truth (metadata indexed in PostgreSQL)
 - **Markdown editor** (`/account/edit`) — raw markdown with live preview, for those who prefer it.
 - **Sandbox** (`/sandbox`, server edition) — non-persistent live preview via `POST /api/decks/preview`.
 - Parses frontmatter on save, validates required fields, generates the slug from the title.
-- Raw markdown **file upload** is admin-only (`POST /api/decks/upload`).
+- **File uploads** (re-enabled now that the inspection pipeline exists): users can upload a
+  `.md` deck or a `.css` theme from `/account` — files are checked on the way in (parser,
+  markup-safety guard, content moderation, theme-CSS validation, quotas) and any problem is
+  reported back to the uploader verbatim. The separate `POST /api/decks/upload` endpoint
+  remains the admin's trusted (unmoderated) path.
 
 ---
 
