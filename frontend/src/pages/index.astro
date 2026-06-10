@@ -1,11 +1,11 @@
 ---
 /**
- * Landing page ( / ) — front door for the v2 DEVELOPMENT instance
- * (v2.vibedeck.online). Per-deployment + gitignored (see .gitignore): this
- * file is specific to this box and must NOT be committed to the v2 branch.
+ * Landing page ( / ) — front door for vibedeck.online (this instance was
+ * promoted from v2.vibedeck.online on 2026-06-09; the old domain redirects
+ * here). Per-deployment in intent, though currently tracked in git.
  *
  * Layout: logo + VibeDeck hero, the tagline as a sub-heading, the
- * development-preview callout, the one-paragraph pitch, then "recently added"
+ * one-paragraph pitch, featured reference decks, then "recently added"
  * and "upcoming" feature lists. Nothing else before the footer.
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -39,15 +39,23 @@ const featured = (
   )
 ).filter((d): d is NonNullable<typeof d> => d !== null);
 
-// Recently shipped on this v2 instance (newest first).
+// Recently shipped (newest first).
 const recentlyAdded = [
   {
-    label:
-      "Your own corner of the site — every author gets a page and personal deck URLs (/u/you/…)",
+    label: "Search the whole library, and filter any list by keyword",
     date: "Jun 9, 2026",
   },
   {
-    label: "Pick your handle at sign-up; invite-gated accounts",
+    label: "Card transitions and reveal-one-bullet-at-a-time — pick per deck",
+    date: "Jun 9, 2026",
+  },
+  {
+    label: "Upload markdown decks and CSS themes — checked on the way in",
+    date: "Jun 9, 2026",
+  },
+  {
+    label:
+      "Your own corner of the site — every author gets a page and personal deck URLs (/u/you/…)",
     date: "Jun 9, 2026",
   },
   {
@@ -59,27 +67,16 @@ const recentlyAdded = [
     label: "Deck and theme builders — author cards and palettes with forms, no markdown needed",
     date: "Jun 7, 2026",
   },
-  {
-    label: "Public, unlisted, and private decks",
-    date: "Jun 7, 2026",
-  },
-  {
-    label: "Custom themes render for every reader, and decks can be embedded on other sites",
-    date: "Jun 7, 2026",
-  },
 ];
 
-// Next up, from the v2 roadmap.
+// Next up.
 const upcoming = [
-  "Keyword filtering on the deck index",
-  "Search across decks",
-  "Transition effects between cards",
-  "Progressive reveal of bullet points",
   "Smarter moderation assistance",
+  "More card types and themes",
 ];
 ---
 
-<BaseLayout title="VibeDeck — development preview">
+<BaseLayout title="VibeDeck — knowledge, one card at a time">
   <main class="landing">
     <!-- Hero: logo + wordmark, then the tagline as a sub-heading -->
     <section class="landing__hero">
@@ -87,17 +84,6 @@ const upcoming = [
       <h1 class="landing__headline">VibeDeck</h1>
       <p class="landing__subhead">Knowledge, one card at a time.</p>
     </section>
-
-    <!-- Development notice -->
-    <aside class="devnotice" role="note">
-      <span class="devnotice__tag">Development preview</span>
-      <p class="devnotice__body">
-        This is the <strong>v2 development instance</strong> of Vibedeck. It's a
-        work in progress — features, content, and data here can change or break
-        at any time, without warning. For the stable release, head to
-        <a class="devnotice__link" href="https://vibedeck.online">vibedeck.online</a>.
-      </p>
-    </aside>
 
     <p class="landing__intro">
       Vibedeck turns your markdown files into beautiful, paginated card decks.
@@ -226,38 +212,6 @@ const upcoming = [
     line-height: 1.1;
     color: var(--vd-accent);
     margin: 0.4rem 0 0;
-  }
-
-  /* ── Development notice ── */
-  .devnotice {
-    border: 1px solid var(--vd-accent);
-    border-left-width: 4px;
-    border-radius: var(--vd-radius);
-    background: var(--vd-card-bg);
-    padding: 1rem 1.25rem;
-    margin: clamp(2rem, 6vw, 3rem) 0 0;
-  }
-  .devnotice__tag {
-    display: inline-block;
-    font-family: var(--vd-font-heading);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.75rem;
-    color: var(--vd-bg);
-    background: var(--vd-accent);
-    padding: 0.2rem 0.6rem;
-    border-radius: var(--vd-radius);
-    margin-bottom: 0.6rem;
-  }
-  .devnotice__body {
-    margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: var(--vd-text);
-  }
-  .devnotice__link {
-    color: var(--vd-accent);
-    text-decoration: underline;
   }
 
   /* ── Intro paragraph ── */

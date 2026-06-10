@@ -164,7 +164,7 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
       for (const d of g.decks) grid.append(V.buildCard(d));
     }
     // Deep-link: /decks?deck=<canonical url> opens that deck's modal on load
-    // (used by the "View on v2.vibedeck.online" link from an embed widget).
+    // (used by the "View on vibedeck.online" link from an embed widget).
     // Legacy form <topic>/<slug> (pre-user-spaces embeds) still matches.
     const want = new URLSearchParams(location.search).get("deck");
     if (want) {

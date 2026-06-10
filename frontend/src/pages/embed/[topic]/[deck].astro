@@ -7,7 +7,7 @@
  * iframe; clicking opens the shared deck modal with the full reader and NO
  * Embed/Edit/Delete (DeckModal is included with embeddable={false}, and a
  * third-party viewer is anonymous so owner actions are hidden). A "View on
- * v2.vibedeck.online" link opens the deck (with its modal) on the site in a
+ * vibedeck.online" link opens the deck (with its modal) on the site in a
  * new tab. Chrome-less (no navbar).
  */
 import BaseLayout from "../../../layouts/BaseLayout.astro";
@@ -73,7 +73,7 @@ const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
         class="embed__ext"
         href={viewUrl}
         target="_blank"
-        rel="noopener">View on v2.vibedeck.online ↗</a>
+        rel="noopener">View on vibedeck.online ↗</a>
     </div>
   </main>
 
