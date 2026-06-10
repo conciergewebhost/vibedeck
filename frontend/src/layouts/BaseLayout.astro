@@ -57,6 +57,13 @@ const ogImageUrl = Astro.site ? new URL(ogImage, Astro.site).href : ogImage;
 const canonical = Astro.site
   ? new URL(Astro.url.pathname, Astro.site).href
   : undefined;
+
+// Optional sitewide analytics (e.g. self-hosted Umami), config-driven so the
+// tracked code carries no deployment specifics: both PUBLIC_ANALYTICS_* env
+// values must be set (frontend/.env, baked at build) or nothing is emitted.
+const analyticsSrc = import.meta.env.PUBLIC_ANALYTICS_SRC;
+const analyticsId = import.meta.env.PUBLIC_ANALYTICS_WEBSITE_ID;
+const analytics = analyticsSrc && analyticsId;
 ---
 
 <!doctype html>
@@ -67,6 +74,9 @@ const canonical = Astro.site
     <title>{title}</title>
     <meta name="description" content={description} />
     {canonical && <link rel="canonical" href={canonical} />}
+    {analytics && (
+      <script is:inline defer src={analyticsSrc} data-website-id={analyticsId}></script>
+    )}
 
     {/* Brand favicons + app icons (The Reticle). */}
     <link rel="icon" href="/favicon.ico" sizes="any" />
