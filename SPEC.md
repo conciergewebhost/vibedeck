@@ -46,6 +46,7 @@ the server edition namespaces all content under its author's handle (per-user sp
 | `/u/{handle}` | Author page — a user's public decks (server edition) |
 | `/embed/...` | Embeddable widget, mirroring the reader path |
 | `/{topic}?kw={keyword}` · `/decks?kw={keyword}` | Keyword-filtered deck lists |
+| `/decks?q={terms}` | Full-content search across the library |
 
 Topic slugs are lowercase and hyphen-separated, derived directly from the `topic` frontmatter
 field; handles are chosen at signup (lowercase, slug-safe, reserved words blocked).
@@ -287,7 +288,9 @@ Unlisted and private decks are served with `noindex` (and private decks 404 publ
       (`site_settings` store; owner-only Settings tab)
 - [x] Keyword filtering UI — clickable keyword chips filter topic pages (`?kw={keyword}`,
       both URL shapes) and a count-ordered filter bar narrows the `/decks` library
-- [ ] Search across decks
+- [x] Search across decks — full-content search (titles, descriptions, authors, keywords,
+      card text) via an indexed `search_text` column; search box on `/decks` (`?q=…`,
+      combinable with the keyword filter)
 - [ ] Transition effects between cards
 - [ ] Optional progressive reveal of bullet points (one at a time)
 

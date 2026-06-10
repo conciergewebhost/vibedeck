@@ -128,6 +128,16 @@ def index_deck_file(db: Session, *, filename: str, owner_id: int) -> Deck:
     deck.card_count = len(parsed.cards)
     deck.topic = topic
     deck.keywords = _sync_keywords(db, meta.get("keywords", []))
+    # Searchable copy of everything reader-visible (see Deck.search_text).
+    deck.search_text = "\n".join(
+        [
+            str(meta["title"]),
+            str(meta["author"]),
+            str(meta.get("description") or ""),
+            " ".join(str(k) for k in meta.get("keywords") or []),
+            *(card.body for card in parsed.cards),
+        ]
+    ).lower()
 
     db.flush()
     return deck

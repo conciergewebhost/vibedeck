@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from config import settings
@@ -343,6 +343,40 @@ def list_public_decks(db: Session) -> list[PublicDeckItem]:
         .order_by(User.handle, Topic.display_name, Deck.title)
     ).all()
     return [_public_deck_item(d) for d in decks]
+
+
+def search_public_decks(db: Session, q: str) -> list[PublicDeckItem]:
+    """Public decks matching a search query, library-ordered.
+
+    Every whitespace-separated term must match (AND) somewhere in the deck:
+    the indexed `search_text` (title/author/description/keywords/card
+    bodies) OR — so decks indexed before that column existed stay findable —
+    the metadata columns directly. Same visibility/moderation/active filters
+    as the library listing. Plain ILIKE: fine at this scale, tsvector later.
+    """
+    stmt = (
+        select(Deck)
+        .join(Topic, Deck.topic_id == Topic.id)
+        .join(User, Deck.owner_id == User.id)
+        .options(joinedload(Deck.owner), selectinload(Deck.keywords))
+        .where(
+            Deck.visibility == "public",
+            Deck.moderation_status == "approved",
+            User.is_active,
+        )
+        .order_by(User.handle, Topic.display_name, Deck.title)
+    )
+    for term in q.split():
+        like = f"%{term}%"
+        stmt = stmt.where(
+            or_(
+                Deck.search_text.ilike(like),
+                Deck.title.ilike(like),
+                Deck.description.ilike(like),
+                Deck.author.ilike(like),
+            )
+        )
+    return [_public_deck_item(d) for d in db.scalars(stmt).all()]
 
 
 def list_decks_by_handle(db: Session, handle: str) -> list[PublicDeckItem]:

@@ -88,6 +88,15 @@ class Deck(Base):
     # Denormalised card count for listings (see module docstring).
     card_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Lowercased searchable copy of the deck's text (title, author,
+    # description, keywords, card bodies), refreshed by index_deck_file on
+    # every save/reindex. Card bodies live only in the file otherwise, so
+    # this is what /api/decks/public?q= matches against. Nullable: rows
+    # indexed before the column existed backfill on their next reindex and
+    # stay findable by metadata in the meantime. ILIKE-scale; switch to a
+    # Postgres tsvector if the library outgrows it.
+    search_text: Mapped[str | None] = mapped_column(Text, default=None)
+
     topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"))
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 

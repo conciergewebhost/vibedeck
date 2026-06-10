@@ -107,8 +107,10 @@ export interface SiteMeta {
 export const fetchMeta = () => getJson<SiteMeta>("/api/meta");
 
 export const fetchTopics = () => getJson<TopicSummary[]>("/api/topics");
-export const fetchPublicDecks = () =>
-  getJson<PublicDeckItem[]>("/api/decks/public");
+export const fetchPublicDecks = (q?: string) =>
+  getJson<PublicDeckItem[]>(
+    q ? `/api/decks/public?q=${encodeURIComponent(q)}` : "/api/decks/public",
+  );
 export const fetchTopic = (slug: string) =>
   getJson<TopicDetail>(`/api/topics/${encodeURIComponent(slug)}`);
 export const fetchDeck = (topic: string, deck: string) =>

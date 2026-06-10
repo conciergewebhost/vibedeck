@@ -12,14 +12,17 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import DeckModal from "../components/DeckModal.astro";
 import { fetchMeta, fetchPublicDecks } from "../lib/api";
 
-const allDecks = (await fetchPublicDecks()) ?? [];
+// Full-content search (?q=…) happens in the API (card text is indexed
+// server-side); the keyword filter (?kw=…) then narrows the fetched set.
+const q = Astro.url.searchParams.get("q")?.trim() || null;
+const allDecks = (await fetchPublicDecks(q ?? undefined)) ?? [];
 const meta = await fetchMeta().catch(() => null);
 // Per-user spaces: attribute each topic group to its author (two owners can
 // have same-named topics, so the group key includes the owner).
 const userSpaces = meta?.user_spaces_enabled ?? false;
 
-// Single-keyword filter (?kw=…): the filter bar is built from ALL decks'
-// keywords (count-ordered) and the grid narrows to matching decks.
+// The keyword bar is built from the fetched (search-narrowed) set, so chips
+// refine the current results; their links must carry ?q= through.
 const kw = Astro.url.searchParams.get("kw");
 const kwCounts = new Map<string, number>();
 for (const d of allDecks)
@@ -28,6 +31,10 @@ const keywordBar = [...kwCounts.entries()].sort(
   (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
 );
 const decks = kw ? allDecks.filter((d) => d.keywords.includes(kw)) : allDecks;
+
+// Link helpers that preserve the active search.
+const qPrefix = q ? `q=${encodeURIComponent(q)}&` : "";
+const clearHref = q ? `/decks?q=${encodeURIComponent(q)}` : "/decks";
 
 // Group decks by owner+topic, preserving the API's order.
 type Group = {
@@ -65,29 +72,45 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
       <p class="decks__tag">Browse the library, grouped by topic.</p>
     </header>
 
+    <form class="decks__search" method="get" action="/decks" role="search">
+      <input
+        class="decks__search-input"
+        type="search"
+        name="q"
+        value={q ?? ""}
+        placeholder="Search decks — titles, text, keywords…"
+        aria-label="Search decks"
+      />
+      <button class="decks__search-btn" type="submit">Search</button>
+    </form>
+
     {keywordBar.length > 0 && (
       <nav class="kwbar" aria-label="Filter by keyword">
         {keywordBar.map(([k, n]) => (
           <a
             class={k === kw ? "kw__link kw__link--active" : "kw__link"}
-            href={k === kw ? "/decks" : `/decks?kw=${encodeURIComponent(k)}`}
+            href={k === kw ? clearHref : `/decks?${qPrefix}kw=${encodeURIComponent(k)}`}
           >
             {k} <span class="kw__count">{n}</span>
           </a>
         ))}
       </nav>
     )}
-    {kw && (
+    {(q || kw) && (
       <p class="decks__filter">
-        {decks.length} deck{decks.length === 1 ? "" : "s"} tagged “{kw}” ·
-        <a href="/decks">× show all</a>
+        {decks.length} deck{decks.length === 1 ? "" : "s"}
+        {q ? ` matching “${q}”` : ""}{q && kw ? "," : ""}{kw ? ` tagged “${kw}”` : ""} ·
+        <a href={kw && q ? clearHref : "/decks"}>{kw && q ? "× clear keyword" : "× show all"}</a>
       </p>
     )}
 
     {
       groups.length === 0 ? (
-        kw ? (
-          <p class="decks__empty">No decks tagged “{kw}”. <a href="/decks">Show all decks</a></p>
+        q || kw ? (
+          <p class="decks__empty">
+            No decks{q ? ` matching “${q}”` : ""}{kw ? ` tagged “${kw}”` : ""}.
+            <a href="/decks">Show all decks</a>
+          </p>
         ) : (
           <p class="decks__empty">No decks yet.</p>
         )
@@ -182,6 +205,34 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
   .decks__tag {
     color: var(--vd-text-muted);
     margin: 0 0 1.5rem;
+  }
+  .decks__search {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+  }
+  .decks__search-input {
+    flex: 1;
+    max-width: 24rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+  }
+  .decks__search-btn {
+    padding: 0.55rem 1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .decks__search-btn:hover {
+    filter: brightness(1.08);
   }
   .kwbar {
     display: flex;

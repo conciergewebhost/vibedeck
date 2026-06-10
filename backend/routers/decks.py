@@ -171,8 +171,16 @@ def list_decks(
 
 
 @router.get("/public", response_model=list[PublicDeckItem])
-def list_public_decks(db: Session = Depends(get_db)) -> list[PublicDeckItem]:
-    """All decks for the public library grid (no auth)."""
+def list_public_decks(
+    q: str | None = None, db: Session = Depends(get_db)
+) -> list[PublicDeckItem]:
+    """All decks for the public library grid (no auth).
+
+    With ?q=, narrows to decks whose indexed text (title, author,
+    description, keywords, card bodies) matches every search term.
+    """
+    if q and q.strip():
+        return decks_service.search_public_decks(db, q.strip())
     return decks_service.list_public_decks(db)
 
 

@@ -314,3 +314,50 @@ class TestEditionUrlShape(_AppTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSearch(_AppTestCase):
+    """Full-content search via GET /api/decks/public?q=…"""
+
+    def test_search_matches_card_body_text(self):
+        a = self._auth("alice@e.com")
+        self._mine(_md(title="Houses", body="The zenith governs ambition."), a)
+        self._mine(_md(title="Moons", body="Tides and cycles."), a)
+
+        hits = self.client.get("/api/decks/public?q=zenith").json()
+        self.assertEqual([d["slug"] for d in hits], ["houses"])
+        # Case-insensitive; multi-term is AND across the whole deck text.
+        self.assertEqual(
+            len(self.client.get("/api/decks/public?q=ZENITH ambition").json()), 1
+        )
+        self.assertEqual(
+            self.client.get("/api/decks/public?q=zenith tides").json(), []
+        )
+
+    def test_search_respects_visibility_and_moderation(self):
+        a = self._auth("alice@e.com")
+        self._mine(
+            _md(title="Hidden", body="zenith secret").replace(
+                "theme: default", "theme: default\nvisibility: private"
+            ),
+            a,
+        )
+        self._mine(_md(title="Spammy", body="zenith buy now"), a)  # → flagged
+        self.assertEqual(self.client.get("/api/decks/public?q=zenith").json(), [])
+
+    def test_metadata_matches_without_search_text(self):
+        # A row indexed before the column existed (search_text NULL) still
+        # matches on its metadata columns.
+        a = self._auth("alice@e.com")
+        self._mine(_md(title="Legacy Deck", body="body words"), a)
+        db = self.Session()
+        deck = db.scalars(select(Deck)).one()
+        deck.search_text = None
+        db.commit()
+        db.close()
+        self.assertEqual(
+            [d["slug"] for d in self.client.get("/api/decks/public?q=legacy").json()],
+            ["legacy-deck"],
+        )
+        # Body words are NOT findable until reindexed — the documented gap.
+        self.assertEqual(self.client.get("/api/decks/public?q=words").json(), [])
