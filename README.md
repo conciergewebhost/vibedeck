@@ -241,6 +241,11 @@ type: concept
 Kept deliberately small. The constraint is the feature.
 ```
 
+The complete format reference — every field, card type, and validation
+rule, with a worked example — is
+[`docs/VIBEDECK_FORMAT.md`](docs/VIBEDECK_FORMAT.md) (written to double as
+AI-assistant context for generating decks). The short version:
+
 **Frontmatter:** `title`, `author`, `topic`, `keywords`, `theme` are required;
 optional: `description`, `visibility` (`public` / `unlisted` / `private`),
 `transition` (`slide` / `fade` / `none` — the reader's card animation), and
@@ -311,6 +316,7 @@ handles TLS automatically.
 ## Documentation
 
 - [`SPEC.md`](SPEC.md) — the full product specification.
+- [`docs/VIBEDECK_FORMAT.md`](docs/VIBEDECK_FORMAT.md) — the deck-file authoring reference: every field, card type, and rule, with examples. Written to double as AI-assistant context for generating decks.
 - [`docs/THEMING.md`](docs/THEMING.md) — creating themes: the token contract, the in-browser builder, and CSS-file themes.
 - [`docs/EDITIONS.md`](docs/EDITIONS.md) — the standalone/server edition architecture and roadmap.
 - [`CLAUDE.md`](CLAUDE.md) — conventions and working notes (for contributors and
