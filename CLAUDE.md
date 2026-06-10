@@ -42,7 +42,8 @@ vibedeck/
 │   ├── schemas/       # Pydantic schemas
 │   └── services/      # Business logic
 ├── migrations/        # Alembic migration files
-├── decks/             # Uploaded markdown deck files
+├── decks/             # LIVE deck files (UPLOAD_DIR) — gitignored user content
+├── samples/           # bundled reference decks (seed.py copies them in)
 ├── .env.example
 ├── Caddyfile.example
 ├── CLAUDE.md
