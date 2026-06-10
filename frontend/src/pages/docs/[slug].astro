@@ -1,0 +1,173 @@
+---
+/**
+ * /docs/{slug} — a documentation page, rendered from the repo's own
+ * docs/*.md (see lib/docs.ts). "Copy as markdown" puts the raw file on the
+ * clipboard; "Raw" serves it as plain text (/docs/{slug}.md).
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { DOCS } from "../../lib/docs";
+import { renderMarkdown } from "../../lib/markdown";
+
+const doc = DOCS[Astro.params.slug ?? ""];
+if (!doc) {
+  return Astro.rewrite("/404");
+}
+
+// Repo-relative links (e.g. ../frontend/src/styles/themes/default.css) can't
+// resolve on the site — and the sanitizer would strip them anyway. Point them
+// at the GitHub tree for display; the copyable raw markdown stays untouched.
+const displayMd = doc.raw.replaceAll(
+  "](../",
+  "](https://github.com/conciergewebhost/vibedeck/blob/main/",
+);
+const html = renderMarkdown(displayMd);
+---
+
+<BaseLayout title={`${doc.title} — Vibedeck`}>
+  <main class="docpage">
+    <nav class="docpage__bar" aria-label="Documentation">
+      <a class="docpage__back" href="/docs">‹ Docs</a>
+      <span class="docpage__bar-gap"></span>
+      <button class="docpage__action" type="button" data-copy-doc={doc.slug}>
+        Copy as markdown
+      </button>
+      <a class="docpage__action" href={`/docs/${doc.slug}.md`}>Raw</a>
+    </nav>
+
+    <article class="docpage__body" set:html={html} />
+  </main>
+</BaseLayout>
+
+<script>
+  const btn = document.querySelector<HTMLButtonElement>("[data-copy-doc]");
+  btn?.addEventListener("click", async () => {
+    const original = btn.textContent;
+    try {
+      const res = await fetch(`/docs/${btn.dataset.copyDoc}.md`);
+      if (!res.ok) throw new Error(String(res.status));
+      await navigator.clipboard.writeText(await res.text());
+      btn.textContent = "Copied!";
+    } catch {
+      btn.textContent = "Couldn't copy — use Raw";
+    }
+    setTimeout(() => (btn.textContent = original), 2000);
+  });
+</script>
+
+<style>
+  .docpage {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3rem) 1.5rem 4rem;
+  }
+  .docpage__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+  }
+  .docpage__back {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+  }
+  .docpage__back:hover {
+    color: var(--vd-accent);
+  }
+  .docpage__bar-gap {
+    flex: 1;
+  }
+  .docpage__action {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .docpage__action:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+
+  /* Prose styling for the rendered markdown (set:html → :global). */
+  .docpage__body {
+    line-height: 1.65;
+  }
+  .docpage__body :global(h1) {
+    font-size: clamp(1.6rem, 5vw, 2.2rem);
+    line-height: 1.2;
+    color: var(--vd-heading);
+    margin: 0 0 1rem;
+  }
+  .docpage__body :global(h2) {
+    color: var(--vd-heading);
+    margin: 2.25rem 0 0.75rem;
+  }
+  .docpage__body :global(h3) {
+    color: var(--vd-heading);
+    margin: 1.75rem 0 0.5rem;
+  }
+  .docpage__body :global(p),
+  .docpage__body :global(li) {
+    color: var(--vd-text);
+  }
+  .docpage__body :global(a) {
+    color: var(--vd-accent);
+  }
+  .docpage__body :global(hr) {
+    border: 0;
+    border-top: 1px solid var(--vd-card-border);
+    margin: 2rem 0;
+  }
+  .docpage__body :global(code) {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.875em;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+  }
+  .docpage__body :global(pre) {
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+  }
+  .docpage__body :global(pre code) {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+  .docpage__body :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+    display: block;
+    overflow-x: auto;
+  }
+  .docpage__body :global(th),
+  .docpage__body :global(td) {
+    border: 1px solid var(--vd-card-border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .docpage__body :global(th) {
+    color: var(--vd-heading);
+    background: var(--vd-card-bg);
+  }
+  .docpage__body :global(blockquote) {
+    margin: 1rem 0;
+    border-left: 3px solid var(--vd-accent);
+    padding-left: 1rem;
+    color: var(--vd-text-muted);
+  }
+</style>

@@ -1,0 +1,122 @@
+---
+/**
+ * /docs — index of the on-site documentation.
+ *
+ * Each doc links to its rendered page and offers a one-click "copy as
+ * markdown" (the raw file, fetched from /docs/{slug}.md) for pasting into
+ * notes or an AI assistant.
+ */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { DOC_LIST } from "../../lib/docs";
+---
+
+<BaseLayout title="Docs — Vibedeck">
+  <main class="docs">
+    <h1>Docs</h1>
+    <p class="docs__lead">
+      Guides for authoring decks and themes. Each one can be copied as plain
+      markdown — handy for keeping alongside your notes, or for pasting into
+      an AI assistant so it can write valid decks for you.
+    </p>
+
+    <ul class="docs__list">
+      {DOC_LIST.map((doc) => (
+        <li class="docs__item">
+          <h2 class="docs__title">
+            <a href={`/docs/${doc.slug}`}>{doc.title}</a>
+          </h2>
+          <p class="docs__blurb">{doc.blurb}</p>
+          <p class="docs__actions">
+            <a class="docs__action" href={`/docs/${doc.slug}`}>Read</a>
+            <button class="docs__action" type="button" data-copy-doc={doc.slug}>
+              Copy as markdown
+            </button>
+            <a class="docs__action" href={`/docs/${doc.slug}.md`}>Raw</a>
+          </p>
+        </li>
+      ))}
+    </ul>
+  </main>
+</BaseLayout>
+
+<script>
+  // Copy a doc's raw markdown to the clipboard, with inline feedback.
+  document.querySelectorAll<HTMLButtonElement>("[data-copy-doc]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const original = btn.textContent;
+      try {
+        const res = await fetch(`/docs/${btn.dataset.copyDoc}.md`);
+        if (!res.ok) throw new Error(String(res.status));
+        await navigator.clipboard.writeText(await res.text());
+        btn.textContent = "Copied!";
+      } catch {
+        btn.textContent = "Couldn't copy — use Raw";
+      }
+      setTimeout(() => (btn.textContent = original), 2000);
+    });
+  });
+</script>
+
+<style>
+  .docs {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3rem) 1.5rem 4rem;
+  }
+  .docs__lead {
+    color: var(--vd-text-muted);
+    line-height: 1.6;
+    margin: 0 0 2rem;
+  }
+  .docs__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+  }
+  .docs__item {
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    padding: 1.25rem 1.5rem;
+  }
+  .docs__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.2rem;
+  }
+  .docs__title a {
+    color: var(--vd-heading);
+    text-decoration: none;
+  }
+  .docs__title a:hover {
+    color: var(--vd-accent);
+  }
+  .docs__blurb {
+    margin: 0 0 1rem;
+    color: var(--vd-text-muted);
+    line-height: 1.55;
+  }
+  .docs__actions {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .docs__action {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .docs__action:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+</style>
