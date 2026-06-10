@@ -240,8 +240,6 @@ const total = deck.cards.length;
   .reader__stage {
     flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
     overflow-y: auto;
     overflow-x: hidden; /* never let scaled content spill past the edges */
     padding: clamp(1.25rem, 5vw, 2.5rem);
@@ -253,6 +251,10 @@ const total = deck.cards.length;
   }
   .reader__card.is-active {
     display: block;
+    /* Auto margins centre the card when it fits but — unlike align-items/
+       justify-content centring — keep the top reachable by scroll when a
+       card is taller than the stage. */
+    margin: auto;
   }
   /* Progressive bullet reveal: hidden-but-laid-out so nothing reflows as
      items appear. Global — the lis live in set:html markdown content that
