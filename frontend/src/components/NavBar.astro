@@ -27,6 +27,17 @@ const showSandbox = meta?.edition === "server";
     <div class="nav__links">
       <a class="nav__link" href="/decks">Decks</a>
       {showSandbox && <a class="nav__link" href="/sandbox">Sandbox</a>}
+      <!-- Logged-out (default, SSR): a single login/signup entry point. -->
+      <a class="nav__link nav__auth" href="/login" data-nav-login>Log in / Sign up</a>
+      <!-- Logged-in (revealed client-side when a session exists). -->
+      <span class="nav__user" data-nav-user hidden>
+        <a class="nav__link" href="/account">My decks</a>
+        <!-- Admins (and the owner) get a direct link to the admin surface. -->
+        <a class="nav__link" href="/admin" data-nav-admin hidden>Admin</a>
+        <span class="nav__email" data-nav-email></span>
+        <button class="nav__logout" type="button" data-nav-logout>Log out</button>
+      </span>
+      <!-- Last in the bar, after whichever auth state is showing. -->
       <a
         class="nav__link nav__github"
         href="https://github.com/conciergewebhost/vibedeck"
@@ -54,16 +65,6 @@ const showSandbox = meta?.edition === "server";
           />
         </svg>
       </a>
-      <!-- Logged-out (default, SSR): a single login/signup entry point. -->
-      <a class="nav__link nav__auth" href="/login" data-nav-login>Log in / Sign up</a>
-      <!-- Logged-in (revealed client-side when a session exists). -->
-      <span class="nav__user" data-nav-user hidden>
-        <a class="nav__link" href="/account">My decks</a>
-        <!-- Admins (and the owner) get a direct link to the admin surface. -->
-        <a class="nav__link" href="/admin" data-nav-admin hidden>Admin</a>
-        <span class="nav__email" data-nav-email></span>
-        <button class="nav__logout" type="button" data-nav-logout>Log out</button>
-      </span>
     </div>
   </nav>
 </header>
