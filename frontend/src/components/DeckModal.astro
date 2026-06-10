@@ -235,6 +235,11 @@ const { embeddable = true } = Astro.props;
   }
 
   // ── Modal ──────────────────────────────────────────────────────────────
+  // On phones the modal already fills most of the viewport and looks right;
+  // expanding adds nothing, so the affordance is desktop-only. Keep this
+  // query in sync with the CSS that hides the ⤢ button.
+  const mobileLayout = window.matchMedia("(max-width: 32rem)");
+
   function setFullscreen(on: boolean) {
     const modal = $<HTMLElement>("[data-modal]");
     const btn = $<HTMLButtonElement>("[data-modal-expand]");
@@ -255,6 +260,7 @@ const { embeddable = true } = Astro.props;
   }
 
   function toggleFullscreen() {
+    if (mobileLayout.matches) return; // guards the `f` key path too
     const modal = $<HTMLElement>("[data-modal]");
     setFullscreen(!modal?.classList.contains("modal--full"));
   }
@@ -465,6 +471,11 @@ const { embeddable = true } = Astro.props;
     $("[data-modal-close]")?.addEventListener("click", closeModal);
     $("[data-modal-delete]")?.addEventListener("click", deleteActiveDeck);
     $("[data-modal-expand]")?.addEventListener("click", toggleFullscreen);
+    // Rotating/resizing into the mobile layout while expanded: drop back to
+    // the modal, matching the hidden ⤢ button.
+    mobileLayout.addEventListener("change", (e) => {
+      if (e.matches) setFullscreen(false);
+    });
     $("[data-modal-embed]")?.addEventListener("click", openEmbedPanel);
     $("[data-embed-copy]")?.addEventListener("click", copyEmbed);
     $("[data-embed-close]")?.addEventListener("click", hideEmbedPanel);
@@ -608,6 +619,11 @@ const { embeddable = true } = Astro.props;
     .deckcard {
       flex-direction: column;
       align-items: flex-start;
+    }
+    /* The modal is the right size on phones already — no expand-to-full.
+       Keep in sync with the `mobileLayout` media query in the script. */
+    .modal__icon[data-modal-expand] {
+      display: none;
     }
   }
 
