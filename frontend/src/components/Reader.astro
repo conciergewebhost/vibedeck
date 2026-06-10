@@ -230,7 +230,15 @@ const total = deck.cards.length;
     document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight") next();
       else if (e.key === "ArrowLeft") prev();
-      else if (e.key === "Escape") closeModal();
+      else if (e.key === " ") {
+        // Space advances — but not when a control is focused (Space also
+        // activates it on keyup, which would double-advance or both advance
+        // and e.g. open the index).
+        if (e.target instanceof Element && e.target.closest("button, a, input, select, textarea"))
+          return;
+        e.preventDefault(); // Space would otherwise scroll the page
+        next();
+      } else if (e.key === "Escape") closeModal();
     });
 
     // Touch swipe (horizontal).

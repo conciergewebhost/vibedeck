@@ -3,8 +3,9 @@
  * /account — the logged-in user's deck portal.
  *
  * Session-gated client-side (redirects to /login without a session). Lists the
- * user's own decks as thumbnail cards via the shared DeckModal component; each
- * opens the expandable viewer (with owner Edit/Delete). New decks are authored
+ * user's own decks as thumbnail cards via the shared DeckModal component; a
+ * thumbnail opens the expandable viewer, the title links to the deck's landing
+ * page (/d/…, with Edit/Delete). New decks are authored
  * in the builder/editor — or uploaded as .md files, re-enabled now that the
  * content/code inspection pipeline exists: uploads are read client-side and
  * submitted through the same validated portal endpoints, so every problem the
@@ -256,7 +257,6 @@ import DeckModal from "../components/DeckModal.astro";
     wireUpload("[data-deck-upload-btn]", "[data-deck-upload]", uploadDeckFile);
     wireUpload("[data-theme-upload-btn]", "[data-theme-upload]", uploadThemeFile);
 
-    document.addEventListener("vibedeck:deck-deleted", () => loadDecks());
     loadMe();
     loadThemes();
     whenReady(loadDecks);

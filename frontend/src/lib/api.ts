@@ -50,6 +50,7 @@ export interface Card {
 }
 
 export interface DeckDetail {
+  id: number; // deck row id (0 for sandbox previews); used by /api/reports
   slug: string;
   title: string;
   author: string;
@@ -63,6 +64,8 @@ export interface DeckDetail {
   owner_handle: string | null;
   transition: "slide" | "fade" | "none"; // card-change animation
   reveal_bullets: boolean; // bullets reveal one per advance
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 async function getJson<T>(path: string): Promise<T | null> {

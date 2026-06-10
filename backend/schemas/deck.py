@@ -74,6 +74,9 @@ class DeckDetail(BaseModel):
     # `transition: slide|fade|none` and `reveal: bullets`.
     transition: str = "slide"
     reveal_bullets: bool = False
+    # Row timestamps for the deck's landing page (None for sandbox previews).
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class UploadResult(BaseModel):

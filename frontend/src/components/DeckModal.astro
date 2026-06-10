@@ -1,32 +1,24 @@
 ---
 /**
- * DeckModal — the shared deck browser used by the portal (/account) and the
- * public library (/decks).
+ * DeckModal — the shared deck viewer used by the portal (/account), the
+ * public library (/decks), author pages and deck landing pages.
  *
  * Renders one modal (the expandable deck viewer) and exposes a small global
  * API on `window.Vibedeck`:
- *   - buildCard(deck)  → a wired thumbnail card <li> (click opens the modal)
+ *   - buildCard(deck)  → a wired thumbnail card <li> (thumbnail click opens
+ *                        the modal; the title links to the deck's own page)
  *   - openDeck(deck)   → open the modal for a deck
  *   - ownedReady       → a promise that resolves once ownership is known
  *   - isOwned(deck)    → whether the signed-in viewer owns the deck
  *
- * Edit/Delete appear only for decks the viewer owns (resolved client-side
- * from /api/decks/mine). Deck shape: { topic, slug, title, url, card_count,
- * created_at, updated_at }. Card + modal styles are global because the cards
- * are created in JS (Astro's scoped styles don't reach JS-built nodes).
+ * The modal is presentation-only: Embed/Report/Edit/Delete live on the deck's
+ * landing page (/d{deck.url} — see DeckPage.astro), which is where the card
+ * title links. Deck shape: { topic, slug, title, url, card_count, created_at,
+ * updated_at }. Card + modal styles are global because the cards are created
+ * in JS (Astro's scoped styles don't reach JS-built nodes).
  *
- * Deleting a deck dispatches `vibedeck:deck-deleted` { topic, slug } so the
- * host page can refresh; the component dispatches `vibedeck:ready` once the
- * API is on window.
- *
- * `embeddable` (default true) renders the "Embed" button + snippet panel. The
- * embed widget itself passes embeddable={false} so its own modal has no
- * Embed/Edit/Delete.
+ * The component dispatches `vibedeck:ready` once the API is on window.
  */
-interface Props {
-  embeddable?: boolean;
-}
-const { embeddable = true } = Astro.props;
 ---
 
 <div class="modal" data-modal hidden>
@@ -44,58 +36,6 @@ const { embeddable = true } = Astro.props;
       </div>
     </header>
     <iframe class="modal__frame" data-modal-frame title="Deck"></iframe>
-    <footer class="modal__foot" data-modal-foot hidden>
-      {embeddable && (
-        <button class="modal__ghost" type="button" data-modal-embed>Embed</button>
-      )}
-      <button class="modal__ghost" type="button" data-modal-report>Report</button>
-      <span class="modal__foot-gap"></span>
-      <a class="modal__edit" data-modal-edit hidden>Edit</a>
-      <button class="modal__del" type="button" data-modal-delete hidden>Delete</button>
-    </footer>
-    <div class="modal__embedpanel" data-report-panel hidden>
-      <label class="modal__embed-label" for="vd-report-reason">
-        Report this deck to the site moderators:
-      </label>
-      <div class="modal__report-row">
-        <select class="modal__report-reason" id="vd-report-reason" data-report-reason>
-          <option value="spam">Spam or misleading</option>
-          <option value="harmful">Harmful or abusive</option>
-          <option value="copyright">Copyright violation</option>
-          <option value="other">Something else</option>
-        </select>
-        <input
-          class="modal__report-detail"
-          type="text"
-          data-report-detail
-          maxlength="500"
-          placeholder="Anything the moderators should know (optional)"
-        />
-      </div>
-      <div class="modal__embed-actions">
-        <span class="modal__report-msg" data-report-msg role="status"></span>
-        <button class="modal__ghost" type="button" data-report-send>Send report</button>
-        <button class="modal__ghost" type="button" data-report-close>Cancel</button>
-      </div>
-    </div>
-    {embeddable && (
-      <div class="modal__embedpanel" data-embed-panel hidden>
-        <label class="modal__embed-label" for="vd-embed-code">
-          Embed code — paste into any page that accepts HTML:
-        </label>
-        <textarea
-          class="modal__embed-code"
-          id="vd-embed-code"
-          data-embed-code
-          readonly
-          rows="3"
-          spellcheck="false"></textarea>
-        <div class="modal__embed-actions">
-          <button class="modal__ghost" type="button" data-embed-copy>Copy</button>
-          <button class="modal__ghost" type="button" data-embed-close>Done</button>
-        </div>
-      </div>
-    )}
   </div>
 </div>
 
@@ -211,11 +151,12 @@ const { embeddable = true } = Astro.props;
 
     const info = document.createElement("div");
     info.className = "deckcard__info";
-    const title = document.createElement("button");
+    // The title links to the deck's landing page (shareable address; also
+    // where Embed/Report/Edit/Delete live). The thumbnail opens the modal.
+    const title = document.createElement("a");
     title.className = "deckcard__title";
-    title.type = "button";
+    title.href = `/d${deck.url}`;
     title.textContent = deck.title;
-    title.addEventListener("click", () => openDeck(deck));
     const dates = document.createElement("p");
     dates.className = "deckcard__dates";
     dates.textContent = datesLine(deck);
@@ -265,128 +206,6 @@ const { embeddable = true } = Astro.props;
     setFullscreen(!modal?.classList.contains("modal--full"));
   }
 
-  function applyOwnerActions(deck: Deck) {
-    const foot = $<HTMLElement>("[data-modal-foot]");
-    const edit = $<HTMLAnchorElement>("[data-modal-edit]");
-    const del = $<HTMLButtonElement>("[data-modal-delete]");
-    const report = $<HTMLButtonElement>("[data-modal-report]");
-    const hasEmbed = !!$("[data-modal-embed]"); // present unless embeddable={false}
-    const reveal = (owned: boolean) => {
-      // Footer always has something now: Report (any non-owner viewer),
-      // Embed (any viewer, when embeddable), or owner actions.
-      if (foot) foot.hidden = false;
-      // No reporting your own deck; reports also need a deck row id.
-      if (report) report.hidden = owned || !deck.id;
-      if (edit) {
-        edit.hidden = !owned;
-        if (owned)
-          // Form builder is the default editor; it links onward to the raw
-          // markdown editor. Only shown for decks the viewer owns.
-          edit.href = `/account/build?topic=${encodeURIComponent(deck.topic)}&deck=${encodeURIComponent(deck.slug)}`;
-      }
-      if (del) del.hidden = !owned;
-    };
-    reveal(false); // Embed/Report show immediately; Edit/Delete once owned.
-    ownedReady.then(() => {
-      if (activeDeck === deck) reveal(isOwned(deck));
-    });
-  }
-
-  // ── Report panel ────────────────────────────────────────────────────────
-  function openReportPanel() {
-    hideEmbedPanel();
-    const panel = $<HTMLElement>("[data-report-panel]");
-    const msg = $<HTMLElement>("[data-report-msg]");
-    const send = $<HTMLButtonElement>("[data-report-send]");
-    if (!panel) return;
-    if (msg) msg.textContent = "";
-    if (send) send.disabled = false;
-    panel.hidden = false;
-  }
-
-  function hideReportPanel() {
-    $<HTMLElement>("[data-report-panel]")?.setAttribute("hidden", "");
-  }
-
-  async function sendReport() {
-    const d = activeDeck;
-    const reason = $<HTMLSelectElement>("[data-report-reason]")?.value ?? "other";
-    const detail = $<HTMLInputElement>("[data-report-detail]")?.value.trim() ?? "";
-    const msg = $<HTMLElement>("[data-report-msg]");
-    const send = $<HTMLButtonElement>("[data-report-send]");
-    if (!d || !d.id) return;
-    if (send) send.disabled = true;
-    try {
-      // Signed-in reporters are attributed; anonymous is fine too.
-      const token = jwt();
-      const res = await fetch("/api/reports", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ deck_id: d.id, reason, detail: detail || null }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (msg) {
-        msg.textContent = res.ok
-          ? (data.message ?? "Thanks — our moderators will take a look.")
-          : (data.detail ?? "Couldn't send the report. Please try again.");
-      }
-      if (!res.ok && send) send.disabled = false;
-    } catch {
-      if (msg) msg.textContent = "Network error. Please try again.";
-      if (send) send.disabled = false;
-    }
-  }
-
-  function embedSnippet(d: Deck): string {
-    const origin = window.location.origin;
-    const title = (d.title || "Deck").replace(/"/g, "&quot;");
-    // The embed widget mirrors the canonical reader path under /embed.
-    return (
-      `<iframe src="${origin}/embed${d.url}"` +
-      ` width="420" height="560" style="border:0;border-radius:8px;max-width:100%" loading="lazy"` +
-      ` title="${title}"></iframe>`
-    );
-  }
-
-  function openEmbedPanel() {
-    hideReportPanel();
-    const d = activeDeck;
-    const panel = $<HTMLElement>("[data-embed-panel]");
-    const code = $<HTMLTextAreaElement>("[data-embed-code]");
-    if (!d || !panel || !code) return;
-    code.value = embedSnippet(d);
-    panel.hidden = false;
-    code.focus();
-    code.select();
-  }
-
-  function hideEmbedPanel() {
-    $<HTMLElement>("[data-embed-panel]")?.setAttribute("hidden", "");
-  }
-
-  async function copyEmbed() {
-    const code = $<HTMLTextAreaElement>("[data-embed-code]");
-    const btn = $<HTMLButtonElement>("[data-embed-copy]");
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code.value);
-    } catch {
-      code.select();
-      try {
-        document.execCommand("copy");
-      } catch {
-        /* clipboard unavailable — the code is shown for manual copy */
-      }
-    }
-    if (btn) {
-      btn.textContent = "Copied!";
-      setTimeout(() => (btn.textContent = "Copy"), 1500);
-    }
-  }
-
   function openDeck(deck: Deck) {
     activeDeck = deck;
     const modal = $<HTMLElement>("[data-modal]");
@@ -394,16 +213,13 @@ const { embeddable = true } = Astro.props;
     const titleEl = $<HTMLElement>("[data-modal-title]");
     if (!modal || !frame) return;
     if (titleEl) titleEl.textContent = deck.title;
-    hideEmbedPanel();
-    hideReportPanel();
-    applyOwnerActions(deck);
-    // Embedding a private deck wouldn't work (it 404s anonymously), so hide it.
-    const embedBtn = $<HTMLElement>("[data-modal-embed]");
-    if (embedBtn) embedBtn.style.display = deck.visibility === "private" ? "none" : "";
     // Bridge Escape out of the same-origin reader iframe (in case focus is
     // inside it) so it still closes this modal.
     frame.onload = () => {
       try {
+        // Move focus off the launcher (a card thumbnail button — Space would
+        // re-activate it) and into the reader, so arrows/Space work natively.
+        frame.contentWindow?.focus();
         frame.contentDocument?.addEventListener("keydown", (ev) => {
           if (ev.key === "Escape") closeModal();
           else if (ev.key === "f" || ev.key === "F") {
@@ -441,8 +257,6 @@ const { embeddable = true } = Astro.props;
     if (!modal) return;
     modal.setAttribute("hidden", "");
     setFullscreen(false);
-    hideEmbedPanel();
-    hideReportPanel();
     if (frame) {
       frame.onload = null;
       frame.src = "about:blank";
@@ -451,37 +265,14 @@ const { embeddable = true } = Astro.props;
     activeDeck = null;
   }
 
-  async function deleteActiveDeck() {
-    const d = activeDeck;
-    if (!d) return;
-    if (!confirm(`Delete “${d.title}”? This removes the deck and its file.`)) return;
-    const token = jwt();
-    const res = await fetch(
-      `/api/decks/mine/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
-      { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
-    );
-    if (res.ok || res.status === 404) {
-      const detail = { topic: d.topic, slug: d.slug, url: d.url };
-      closeModal();
-      document.dispatchEvent(new CustomEvent("vibedeck:deck-deleted", { detail }));
-    }
-  }
-
   function init() {
     $("[data-modal-close]")?.addEventListener("click", closeModal);
-    $("[data-modal-delete]")?.addEventListener("click", deleteActiveDeck);
     $("[data-modal-expand]")?.addEventListener("click", toggleFullscreen);
     // Rotating/resizing into the mobile layout while expanded: drop back to
     // the modal, matching the hidden ⤢ button.
     mobileLayout.addEventListener("change", (e) => {
       if (e.matches) setFullscreen(false);
     });
-    $("[data-modal-embed]")?.addEventListener("click", openEmbedPanel);
-    $("[data-embed-copy]")?.addEventListener("click", copyEmbed);
-    $("[data-embed-close]")?.addEventListener("click", hideEmbedPanel);
-    $("[data-modal-report]")?.addEventListener("click", openReportPanel);
-    $("[data-report-send]")?.addEventListener("click", sendReport);
-    $("[data-report-close]")?.addEventListener("click", hideReportPanel);
     $("[data-modal]")?.addEventListener("click", (e) => {
       if (e.target === e.currentTarget) closeModal();
     });
@@ -497,9 +288,17 @@ const { embeddable = true } = Astro.props;
         toggleFullscreen();
         return;
       }
-      // The reader listens for arrows on its own (iframe) document; forward
-      // them in when focus is on this page so prev/next still work.
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      // The reader listens for arrows/Space on its own (iframe) document;
+      // forward them in when focus is on this page so prev/next still work.
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " ") {
+        // Space on a focused control (e.g. the ✕ button) should activate it,
+        // not advance the deck.
+        if (
+          e.key === " " &&
+          e.target instanceof Element &&
+          e.target.closest("button, a, input, select, textarea")
+        )
+          return;
         const doc = $<HTMLIFrameElement>("[data-modal-frame]")?.contentDocument;
         if (doc) {
           e.preventDefault();
@@ -591,10 +390,7 @@ const { embeddable = true } = Astro.props;
   }
   .deckcard__title {
     align-self: flex-start;
-    background: none;
-    border: 0;
-    padding: 0;
-    margin: 0;
+    text-decoration: none;
     text-align: left;
     font-family: var(--vd-font-heading);
     font-size: 1.25rem;
@@ -701,121 +497,5 @@ const { embeddable = true } = Astro.props;
     width: 100%;
     border: 0;
     background: var(--vd-bg);
-  }
-  .modal__foot {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--vd-card-border);
-  }
-  .modal__foot[hidden] {
-    display: none;
-  }
-  .modal__edit {
-    padding: 0.55rem 1.1rem;
-    background: var(--vd-accent);
-    border: 0;
-    border-radius: var(--vd-radius);
-    color: var(--vd-bg);
-    font: inherit;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-  }
-  .modal__edit:hover {
-    filter: brightness(1.08);
-  }
-  .modal__del {
-    padding: 0.55rem 1.1rem;
-    background: transparent;
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    color: #f87171;
-    font: inherit;
-    cursor: pointer;
-  }
-  .modal__del:hover {
-    border-color: #f87171;
-  }
-  .modal__edit[hidden],
-  .modal__del[hidden] {
-    display: none;
-  }
-  /* Pushes Edit/Delete to the right while Embed stays on the left. */
-  .modal__foot-gap {
-    flex: 1;
-  }
-  .modal__ghost {
-    padding: 0.55rem 1.1rem;
-    background: transparent;
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    color: var(--vd-text);
-    font: inherit;
-    cursor: pointer;
-  }
-  .modal__ghost:hover {
-    border-color: var(--vd-accent);
-    color: var(--vd-accent);
-  }
-
-  /* Embed snippet panel */
-  .modal__embedpanel {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    padding: 0.75rem 1rem 1rem;
-    border-top: 1px solid var(--vd-card-border);
-  }
-  .modal__embedpanel[hidden] {
-    display: none;
-  }
-  .modal__embed-label {
-    font-size: 0.85rem;
-    color: var(--vd-text-muted);
-  }
-  .modal__embed-code {
-    width: 100%;
-    background: var(--vd-bg);
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    color: var(--vd-text);
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    padding: 0.6rem 0.7rem;
-    resize: vertical;
-  }
-  .modal__embed-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  /* Report panel (shares the embed panel container styles) */
-  .modal__report-row {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-  .modal__report-reason,
-  .modal__report-detail {
-    background: var(--vd-bg);
-    border: 1px solid var(--vd-card-border);
-    border-radius: var(--vd-radius);
-    color: var(--vd-text);
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.45rem 0.6rem;
-  }
-  .modal__report-detail {
-    flex: 1;
-    min-width: 12rem;
-  }
-  .modal__report-msg {
-    flex: 1;
-    align-self: center;
-    font-size: 0.8rem;
-    color: var(--vd-text-muted);
   }
 </style>

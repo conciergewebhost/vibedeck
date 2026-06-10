@@ -2,13 +2,11 @@
 /**
  * /embed/{topic}/{deck} — the embeddable deck widget.
  *
- * Meant to be iframed on third-party pages (the "Embed" snippet from the deck
- * modal points here). Shows a first-slide thumbnail + title that fills the
- * iframe; clicking opens the shared deck modal with the full reader and NO
- * Embed/Edit/Delete (DeckModal is included with embeddable={false}, and a
- * third-party viewer is anonymous so owner actions are hidden). A "View
- * on {site}" link opens the deck (with its modal) on the site in a new
- * tab. Chrome-less (no navbar).
+ * Meant to be iframed on third-party pages (the "Embed" snippet from the
+ * deck landing page points here). Shows a first-slide thumbnail + title that
+ * fills the iframe; clicking opens the shared deck modal with the full
+ * reader. A "View on {site}" link opens the deck's landing page on the site
+ * in a new tab. Chrome-less (no navbar).
  */
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import DeckModal from "../../../components/DeckModal.astro";
@@ -35,10 +33,10 @@ const customCss = BUILTIN_THEMES.has(data.theme)
 
 // The API's canonical url for this deck (flat in standalone).
 const url = data.url;
-// Open the deck's modal on the public library, in a new tab. The href is
-// relative to this page's v2 origin (the iframe's document), so it lands on
-// v2 even when the widget is embedded on another site.
-const viewUrl = `/decks?deck=${encodeURIComponent(url)}`;
+// Open the deck's own landing page, in a new tab. The href is relative to
+// this page's v2 origin (the iframe's document), so it lands on v2 even
+// when the widget is embedded on another site.
+const viewUrl = `/d${url}`;
 // Label the outbound link with this deployment's host (PUBLIC_SITE_URL →
 // Astro.site); generic fallback for instances that don't set one.
 const viewLabel = Astro.site ? `View on ${Astro.site.hostname} ↗` : "Open the full site ↗";
@@ -80,7 +78,7 @@ const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
     </div>
   </main>
 
-  <DeckModal embeddable={false} />
+  <DeckModal />
 
   <script type="application/json" id="embed-deck" set:html={deckJson}></script>
   <script>

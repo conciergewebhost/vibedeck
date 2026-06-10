@@ -41,6 +41,8 @@ happens to work beautifully in a presentation context.
 - **Roles** — promotable admins (`is_admin`); the owner manages roles and the
   runtime **signup gate** (invite code on/off + the code itself) from the admin
   Settings tab.
+- **Deck pages** — every deck has its own shareable landing page at `/d/...`
+  (preview, metadata, embed snippet, report, owner edit/delete).
 - **Embeds** — every public deck has an `/embed/...` widget + copy-paste snippet.
 - **Two editions from one codebase** — an `EDITION` setting selects **standalone**
   (single user, flat URLs) or **server** (multi-user host). See

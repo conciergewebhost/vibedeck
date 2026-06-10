@@ -50,7 +50,9 @@ const basePath = Astro.url.pathname;
         <ul class="deck-list">
           {decks.map((d) => (
             <li class="deck-card">
-              <a href={d.url}>
+              {/* Cards link to the deck's landing page; the reader is one
+                  click further (“Read deck”). */}
+              <a href={`/d${d.url}`}>
                 <h2>{d.title}</h2>
                 {d.description && <p class="deck-card__desc">{d.description}</p>}
                 <p class="deck-card__meta">

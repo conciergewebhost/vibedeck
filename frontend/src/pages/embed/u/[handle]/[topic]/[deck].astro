@@ -25,10 +25,10 @@ const customCss = BUILTIN_THEMES.has(data.theme)
 
 // The API's canonical url for this deck (namespaced in the server edition).
 const url = data.url;
-// Open the deck's modal on the public library, in a new tab. The href is
-// relative to this page's origin (the iframe's document), so it lands on
-// the site even when the widget is embedded elsewhere.
-const viewUrl = `/decks?deck=${encodeURIComponent(url)}`;
+// Open the deck's own landing page, in a new tab. The href is relative to
+// this page's origin (the iframe's document), so it lands on the site even
+// when the widget is embedded elsewhere.
+const viewUrl = `/d${url}`;
 // Label the outbound link with this deployment's host (PUBLIC_SITE_URL →
 // Astro.site); generic fallback for instances that don't set one.
 const viewLabel = Astro.site ? `View on ${Astro.site.hostname} ↗` : "Open the full site ↗";
@@ -70,7 +70,7 @@ const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
     </div>
   </main>
 
-  <DeckModal embeddable={false} />
+  <DeckModal />
 
   <script type="application/json" id="embed-deck" set:html={deckJson}></script>
   <script>

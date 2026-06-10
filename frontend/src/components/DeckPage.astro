@@ -1,0 +1,695 @@
+---
+/**
+ * DeckPage — a deck's landing page body, shared by the two /d routes
+ * (/d/{topic}/{deck} and /d/u/{handle}/{topic}/{deck}).
+ *
+ * This is the deck's shareable address: title, author, description, keywords
+ * and dates, a thumbnail that opens the presentation modal, a link to the
+ * full-page reader — and the deck actions (Embed and Report for viewers,
+ * Edit and Delete for the owner) that used to sit in the modal's footer bar.
+ *
+ * `deck` is null when the public API 404s the address (missing, private, or
+ * quarantined). The page then renders as a shell: a signed-in owner is
+ * resolved client-side via /api/decks/mine — so private and in-review decks
+ * still have a working landing page (with Edit/Delete) for their owner —
+ * and everyone else sees "not found". Owner-fallback decks are always opened
+ * through the modal's private path (owner-session preview), since their
+ * public reader URL 404s.
+ */
+import DeckModal from "./DeckModal.astro";
+import type { DeckDetail } from "../lib/api";
+
+interface Props {
+  deck: DeckDetail | null;
+  /** Canonical reader path of the requested address (used by the owner
+   *  fallback to match against /api/decks/mine when `deck` is null). */
+  readerUrl: string;
+}
+const { deck, readerUrl } = Astro.props;
+
+// The reader URL is {topic-home}/{deck-slug}; the topic home is one level up.
+const topicUrl = readerUrl.slice(0, readerUrl.lastIndexOf("/")) || "/decks";
+
+function fmtDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" });
+}
+const metaParts: string[] = [];
+if (deck) {
+  metaParts.push(`${deck.cards.length} card${deck.cards.length === 1 ? "" : "s"}`);
+  const created = fmtDate(deck.created_at);
+  if (created) metaParts.push(`Created ${created}`);
+  if (deck.created_at && deck.updated_at) {
+    const gap = new Date(deck.updated_at).getTime() - new Date(deck.created_at).getTime();
+    const edited = fmtDate(deck.updated_at);
+    if (gap > 2000 && edited) metaParts.push(`Edited ${edited}`);
+  }
+}
+
+// What the client script needs: the modal deck object + the requested path.
+// `<` escaped so a deck title containing "</script>" can't break out.
+const stateJson = JSON.stringify({
+  deck: deck && {
+    id: deck.id,
+    topic: deck.topic,
+    slug: deck.slug,
+    title: deck.title,
+    url: deck.url,
+    card_count: deck.cards.length,
+    visibility: deck.visibility,
+  },
+  readerUrl,
+}).replace(/</g, "\\u003c");
+---
+
+<main class="dpage">
+  <a class="dpage__back" href="/decks">‹ All decks</a>
+
+  <section class="dpage__main" data-dpage-main hidden={!deck}>
+    <div class="dpage__layout">
+      <button
+        class="dpage__thumb"
+        type="button"
+        data-dpage-thumb
+        aria-label={`Open ${deck?.title ?? "this deck"} in the viewer`}
+      >
+        {deck ? (
+          <iframe
+            src={`${deck.url}?embed=1`}
+            title={deck.title}
+            loading="lazy"
+            scrolling="no"
+            tabindex="-1"
+            aria-hidden="true"></iframe>
+        ) : (
+          <span class="dpage__private">🔒 Private</span>
+        )}
+        <span class="dpage__thumb-hint">▶ View</span>
+      </button>
+
+      <div class="dpage__info">
+        <h1 class="dpage__title" data-dpage-title>{deck?.title}</h1>
+        <p class="dpage__byline">
+          {deck && <>by {deck.author} · </>}
+          <a href={deck ? topicUrl : "/decks"} data-dpage-topiclink>
+            {deck ? deck.topic : ""}
+          </a>
+        </p>
+        {deck?.description && <p class="dpage__desc">{deck.description}</p>}
+        {deck && deck.keywords.length > 0 && (
+          <ul class="dpage__kw">
+            {deck.keywords.map((k) => (
+              <li>
+                <a class="dpage__kw-link" href={`/decks?kw=${encodeURIComponent(k)}`}>
+                  {k}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p class="dpage__meta" data-dpage-meta>{metaParts.join(" · ")}</p>
+        <span
+          class="dpage__badge"
+          data-dpage-badge
+          hidden={!deck || deck.visibility === "public"}
+        >
+          {deck && deck.visibility !== "public" ? deck.visibility : ""}
+        </span>
+
+        <div class="dpage__actions">
+          <a class="dpage__read" href={deck?.url} data-dpage-read>Read deck</a>
+          <button class="dpage__ghost" type="button" data-dpage-embed hidden={!deck}>
+            Embed
+          </button>
+          <button class="dpage__ghost" type="button" data-dpage-report hidden>
+            Report
+          </button>
+          <a class="dpage__ghost dpage__ghost--accent" data-dpage-edit hidden>Edit</a>
+          <button class="dpage__del" type="button" data-dpage-delete hidden>Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dpage__panel" data-embed-panel hidden>
+      <label class="dpage__panel-label" for="vd-embed-code">
+        Embed code — paste into any page that accepts HTML:
+      </label>
+      <textarea
+        class="dpage__embed-code"
+        id="vd-embed-code"
+        data-embed-code
+        readonly
+        rows="3"
+        spellcheck="false"></textarea>
+      <div class="dpage__panel-actions">
+        <button class="dpage__ghost" type="button" data-embed-copy>Copy</button>
+        <button class="dpage__ghost" type="button" data-embed-close>Done</button>
+      </div>
+    </div>
+
+    <div class="dpage__panel" data-report-panel hidden>
+      <label class="dpage__panel-label" for="vd-report-reason">
+        Report this deck to the site moderators:
+      </label>
+      <div class="dpage__report-row">
+        <select class="dpage__report-reason" id="vd-report-reason" data-report-reason>
+          <option value="spam">Spam or misleading</option>
+          <option value="harmful">Harmful or abusive</option>
+          <option value="copyright">Copyright violation</option>
+          <option value="other">Something else</option>
+        </select>
+        <input
+          class="dpage__report-detail"
+          type="text"
+          data-report-detail
+          maxlength="500"
+          placeholder="Anything the moderators should know (optional)"
+        />
+      </div>
+      <div class="dpage__panel-actions">
+        <span class="dpage__report-msg" data-report-msg role="status"></span>
+        <button class="dpage__ghost" type="button" data-report-send>Send report</button>
+        <button class="dpage__ghost" type="button" data-report-close>Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="dpage__missing" data-dpage-missing hidden={!!deck}>
+    <p data-dpage-missing-msg>
+      {deck ? "" : "Looking for this deck…"}
+    </p>
+    <p><a href="/decks">Browse the deck library ›</a></p>
+  </section>
+</main>
+
+<DeckModal />
+
+<script type="application/json" id="dpage-state" set:html={stateJson}></script>
+
+<script>
+  const SESSION_KEY = "vd_session";
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+  const jwt = () => localStorage.getItem(SESSION_KEY);
+
+  type PageDeck = {
+    id?: number;
+    topic: string;
+    slug: string;
+    title: string;
+    url: string;
+    card_count: number;
+    visibility?: string;
+    created_at?: string | null;
+    updated_at?: string | null;
+  };
+  type State = { deck: PageDeck | null; readerUrl: string };
+
+  const stateEl = document.getElementById("dpage-state");
+  const state: State = stateEl
+    ? JSON.parse(stateEl.textContent || "{}")
+    : { deck: null, readerUrl: "" };
+
+  function whenReady(cb: () => void) {
+    if ((window as any).Vibedeck) cb();
+    else document.addEventListener("vibedeck:ready", cb, { once: true });
+  }
+
+  // ── Embed panel ──────────────────────────────────────────────────────────
+  function embedSnippet(d: PageDeck): string {
+    const origin = window.location.origin;
+    const title = (d.title || "Deck").replace(/"/g, "&quot;");
+    // The embed widget mirrors the canonical reader path under /embed.
+    return (
+      `<iframe src="${origin}/embed${d.url}"` +
+      ` width="420" height="560" style="border:0;border-radius:8px;max-width:100%" loading="lazy"` +
+      ` title="${title}"></iframe>`
+    );
+  }
+
+  function openEmbedPanel(d: PageDeck) {
+    hidePanel("[data-report-panel]");
+    const panel = $<HTMLElement>("[data-embed-panel]");
+    const code = $<HTMLTextAreaElement>("[data-embed-code]");
+    if (!panel || !code) return;
+    code.value = embedSnippet(d);
+    panel.hidden = false;
+    code.focus();
+    code.select();
+  }
+
+  function hidePanel(sel: string) {
+    $<HTMLElement>(sel)?.setAttribute("hidden", "");
+  }
+
+  async function copyEmbed() {
+    const code = $<HTMLTextAreaElement>("[data-embed-code]");
+    const btn = $<HTMLButtonElement>("[data-embed-copy]");
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code.value);
+    } catch {
+      code.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* clipboard unavailable — the code is shown for manual copy */
+      }
+    }
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => (btn.textContent = "Copy"), 1500);
+    }
+  }
+
+  // ── Report panel ─────────────────────────────────────────────────────────
+  function openReportPanel() {
+    hidePanel("[data-embed-panel]");
+    const panel = $<HTMLElement>("[data-report-panel]");
+    const msg = $<HTMLElement>("[data-report-msg]");
+    const send = $<HTMLButtonElement>("[data-report-send]");
+    if (!panel) return;
+    if (msg) msg.textContent = "";
+    if (send) send.disabled = false;
+    panel.hidden = false;
+  }
+
+  async function sendReport(d: PageDeck) {
+    const reason = $<HTMLSelectElement>("[data-report-reason]")?.value ?? "other";
+    const detail = $<HTMLInputElement>("[data-report-detail]")?.value.trim() ?? "";
+    const msg = $<HTMLElement>("[data-report-msg]");
+    const send = $<HTMLButtonElement>("[data-report-send]");
+    if (!d.id) return;
+    if (send) send.disabled = true;
+    try {
+      // Signed-in reporters are attributed; anonymous is fine too.
+      const token = jwt();
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ deck_id: d.id, reason, detail: detail || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (msg) {
+        msg.textContent = res.ok
+          ? (data.message ?? "Thanks — our moderators will take a look.")
+          : (data.detail ?? "Couldn't send the report. Please try again.");
+      }
+      if (!res.ok && send) send.disabled = false;
+    } catch {
+      if (msg) msg.textContent = "Network error. Please try again.";
+      if (send) send.disabled = false;
+    }
+  }
+
+  // ── Owner actions ────────────────────────────────────────────────────────
+  function revealOwnerActions(d: PageDeck) {
+    const edit = $<HTMLAnchorElement>("[data-dpage-edit]");
+    if (edit) {
+      // Form builder is the default editor; it links onward to the raw
+      // markdown editor.
+      edit.href = `/account/build?topic=${encodeURIComponent(d.topic)}&deck=${encodeURIComponent(d.slug)}`;
+      edit.hidden = false;
+    }
+    const del = $<HTMLButtonElement>("[data-dpage-delete]");
+    if (del) del.hidden = false;
+    // No reporting your own deck.
+    const report = $<HTMLButtonElement>("[data-dpage-report]");
+    if (report) report.hidden = true;
+  }
+
+  async function deleteDeck(d: PageDeck) {
+    if (!confirm(`Delete “${d.title}”? This removes the deck and its file.`)) return;
+    const token = jwt();
+    const res = await fetch(
+      `/api/decks/mine/${encodeURIComponent(d.topic)}/${encodeURIComponent(d.slug)}`,
+      { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (res.ok || res.status === 404) location.href = "/account";
+  }
+
+  // ── Wiring ───────────────────────────────────────────────────────────────
+  function wire(d: PageDeck) {
+    $("[data-dpage-thumb]")?.addEventListener("click", () =>
+      whenReady(() => (window as any).Vibedeck.openDeck(d)),
+    );
+    $("[data-dpage-embed]")?.addEventListener("click", () => openEmbedPanel(d));
+    $("[data-embed-copy]")?.addEventListener("click", copyEmbed);
+    $("[data-embed-close]")?.addEventListener("click", () => hidePanel("[data-embed-panel]"));
+    $("[data-dpage-report]")?.addEventListener("click", openReportPanel);
+    $("[data-report-send]")?.addEventListener("click", () => sendReport(d));
+    $("[data-report-close]")?.addEventListener("click", () => hidePanel("[data-report-panel]"));
+    $("[data-dpage-delete]")?.addEventListener("click", () => deleteDeck(d));
+
+    // Report needs a deck row id and stays hidden for the owner.
+    const report = $<HTMLButtonElement>("[data-dpage-report]");
+    if (report) report.hidden = !d.id;
+    whenReady(() => {
+      const V = (window as any).Vibedeck;
+      V.ownedReady.then(() => {
+        if (V.isOwned(d)) revealOwnerActions(d);
+      });
+    });
+  }
+
+  function showMissing() {
+    const missing = $<HTMLElement>("[data-dpage-missing]");
+    const msg = $<HTMLElement>("[data-dpage-missing-msg]");
+    if (msg) msg.textContent = "This deck doesn't exist — or it isn't public.";
+    if (missing) missing.hidden = false;
+    $<HTMLElement>("[data-dpage-main]")?.setAttribute("hidden", "");
+  }
+
+  // The public API 404'd this address. If the viewer owns the deck (private
+  // or in-review), build the page from /api/decks/mine instead.
+  async function resolveOwnerFallback() {
+    const token = jwt();
+    if (!token) return showMissing();
+    let mine: PageDeck[];
+    try {
+      const res = await fetch("/api/decks/mine", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return showMissing();
+      mine = await res.json();
+    } catch {
+      return showMissing();
+    }
+    const found =
+      mine.find((m) => m.url === state.readerUrl) ??
+      mine.find((m) => state.readerUrl.endsWith(`/${m.topic}/${m.slug}`));
+    if (!found) return showMissing();
+
+    // The public reader URL 404s this deck, so the modal must render it
+    // through the owner's session — mark it private regardless of the
+    // stored visibility (covers in-review decks too).
+    const d: PageDeck = { ...found, visibility: "private" };
+
+    const title = $<HTMLElement>("[data-dpage-title]");
+    if (title) title.textContent = d.title;
+    document.title = `${d.title} — Vibedeck`;
+    const topicLink = $<HTMLAnchorElement>("[data-dpage-topiclink]");
+    if (topicLink) topicLink.textContent = d.topic;
+    const meta = $<HTMLElement>("[data-dpage-meta]");
+    if (meta) meta.textContent = `${d.card_count} card${d.card_count === 1 ? "" : "s"}`;
+    const badge = $<HTMLElement>("[data-dpage-badge]");
+    if (badge && found.visibility && found.visibility !== "public") {
+      badge.textContent = found.visibility;
+      badge.hidden = false;
+    }
+    // No public reader page and no embeddable URL for a private deck: the
+    // thumbnail/modal (owner-session preview) is the way to view it.
+    $<HTMLElement>("[data-dpage-read]")?.setAttribute("hidden", "");
+    $<HTMLElement>("[data-dpage-embed]")?.setAttribute("hidden", "");
+    $<HTMLElement>("[data-dpage-missing]")?.setAttribute("hidden", "");
+    $<HTMLElement>("[data-dpage-main]")?.removeAttribute("hidden");
+    wire(d);
+    revealOwnerActions(d);
+  }
+
+  if (state.deck) wire(state.deck);
+  else resolveOwnerFallback();
+</script>
+
+<style>
+  .dpage {
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 6vw, 3.5rem) 1.5rem;
+  }
+  .dpage__back {
+    color: var(--vd-text-muted);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+  }
+  .dpage__back:hover {
+    color: var(--vd-accent);
+  }
+  .dpage__layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .dpage__thumb {
+    flex: none;
+    width: 480px;
+    max-width: 100%;
+    height: 300px;
+    padding: 0;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    overflow: hidden;
+    background: var(--vd-bg);
+    cursor: pointer;
+    position: relative;
+  }
+  .dpage__thumb:hover {
+    border-color: var(--vd-accent);
+  }
+  /* Render the reader large and scale down so the first slide stays crisp.
+     960×600 × 0.5 = 480×300 (the box above). */
+  .dpage__thumb iframe {
+    width: 960px;
+    height: 600px;
+    border: 0;
+    transform: scale(0.5);
+    transform-origin: top left;
+    pointer-events: none;
+  }
+  .dpage__thumb-hint {
+    position: absolute;
+    right: 0.6rem;
+    bottom: 0.6rem;
+    padding: 0.2rem 0.6rem;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.75rem;
+    pointer-events: none;
+  }
+  .dpage__private {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--vd-text-muted);
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+  @media (max-width: 36rem) {
+    .dpage__thumb {
+      width: 288px;
+      height: 180px;
+    }
+    .dpage__thumb iframe {
+      transform: scale(0.3); /* 960×600 × 0.3 = 288×180 */
+    }
+  }
+  .dpage__info {
+    flex: 1;
+    min-width: 16rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .dpage__title {
+    margin: 0;
+    font-family: var(--vd-font-heading);
+    font-size: clamp(1.6rem, 5vw, 2.4rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--vd-heading);
+  }
+  .dpage__byline {
+    margin: 0;
+    color: var(--vd-text-muted);
+    font-size: 0.95rem;
+  }
+  .dpage__byline a {
+    color: var(--vd-text-muted);
+    text-decoration: underline;
+  }
+  .dpage__byline a:hover {
+    color: var(--vd-accent);
+  }
+  .dpage__desc {
+    margin: 0;
+    color: var(--vd-text);
+    line-height: 1.5;
+  }
+  .dpage__kw {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .dpage__kw-link {
+    display: inline-block;
+    font-size: 0.75rem;
+    color: var(--vd-text-muted);
+    border: 1px solid var(--vd-card-border);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    text-decoration: none;
+  }
+  .dpage__kw-link:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .dpage__meta {
+    margin: 0;
+    color: var(--vd-text-muted);
+    font-size: 0.85rem;
+  }
+  .dpage__badge {
+    align-self: flex-start;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .dpage__badge[hidden] {
+    display: none;
+  }
+  .dpage__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .dpage__read {
+    padding: 0.55rem 1.1rem;
+    background: var(--vd-accent);
+    border: 0;
+    border-radius: var(--vd-radius);
+    color: var(--vd-bg);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .dpage__read:hover {
+    filter: brightness(1.08);
+  }
+  .dpage__read[hidden] {
+    display: none;
+  }
+  .dpage__ghost {
+    padding: 0.55rem 1.1rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .dpage__ghost:hover {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .dpage__ghost[hidden] {
+    display: none;
+  }
+  .dpage__ghost--accent {
+    border-color: var(--vd-accent);
+    color: var(--vd-accent);
+  }
+  .dpage__del {
+    padding: 0.55rem 1.1rem;
+    background: transparent;
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: #f87171;
+    font: inherit;
+    cursor: pointer;
+  }
+  .dpage__del:hover {
+    border-color: #f87171;
+  }
+  .dpage__del[hidden] {
+    display: none;
+  }
+
+  /* Embed / report panels */
+  .dpage__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+    padding: 1rem;
+    background: var(--vd-card-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+  }
+  .dpage__panel[hidden] {
+    display: none;
+  }
+  .dpage__panel-label {
+    font-size: 0.85rem;
+    color: var(--vd-text-muted);
+  }
+  .dpage__embed-code {
+    width: 100%;
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 0.6rem 0.7rem;
+    resize: vertical;
+  }
+  .dpage__panel-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .dpage__report-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .dpage__report-reason,
+  .dpage__report-detail {
+    background: var(--vd-bg);
+    border: 1px solid var(--vd-card-border);
+    border-radius: var(--vd-radius);
+    color: var(--vd-text);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+  }
+  .dpage__report-detail {
+    flex: 1;
+    min-width: 12rem;
+  }
+  .dpage__report-msg {
+    flex: 1;
+    align-self: center;
+    font-size: 0.8rem;
+    color: var(--vd-text-muted);
+  }
+
+  .dpage__missing {
+    color: var(--vd-text-muted);
+  }
+  .dpage__missing a {
+    color: var(--vd-accent);
+    text-decoration: none;
+  }
+</style>

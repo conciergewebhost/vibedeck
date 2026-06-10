@@ -1,8 +1,9 @@
 ---
 /**
  * Decks library ( /decks ) — every public deck as a thumbnail card, grouped
- * under its topic. Cards open the shared expandable modal (DeckModal); Edit
- * and Delete appear there only for decks the viewer owns.
+ * under its topic. A card's thumbnail opens the shared expandable modal
+ * (DeckModal); its title links to the deck's own landing page (/d/…), which
+ * carries Embed/Report and the owner's Edit/Delete.
  *
  * The section structure is server-rendered; the cards themselves are built on
  * the client by the shared component (so the card/modal behaviour is shared
@@ -174,16 +175,6 @@ const decksJson = JSON.stringify(groups).replace(/</g, "\\u003c");
         all.find((d) => `${d.topic}/${d.slug}` === want);
       if (target) V.openDeck(target);
     }
-  });
-
-  // When the owner deletes a deck from the modal, drop its card (and the topic
-  // section if it's now empty). Cards are keyed by canonical url.
-  document.addEventListener("vibedeck:deck-deleted", (e) => {
-    const { url } = (e as CustomEvent).detail;
-    const li = document.querySelector(`[data-deck-key="${url}"]`);
-    const grid = li?.closest<HTMLElement>("[data-topic-grid]");
-    li?.remove();
-    if (grid && grid.children.length === 0) grid.closest(".topic-group")?.remove();
   });
 </script>
 

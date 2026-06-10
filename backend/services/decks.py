@@ -248,6 +248,8 @@ def get_deck(
         owner_handle=deck.owner.handle if deck.owner else None,
         transition=_transition(parsed.meta),
         reveal_bullets=parsed.meta.get("reveal") == "bullets",
+        created_at=deck.created_at,
+        updated_at=deck.updated_at,
     )
 
 
