@@ -1,11 +1,19 @@
 ---
 /**
- * /login — passwordless sign-in / sign-up.
+ * /login — sign in via any method this instance offers.
  *
- * One form requests a magic link via POST /api/auth/request-link. Returning
- * users leave the invite code blank; creating a new account (testing phase)
- * requires the shared invite code. Framework-free client script, same style
- * as admin.astro. The actual session is established later on /auth/verify.
+ * Three ways in, auto-detected server-side and reported by /api/meta:
+ *  - Magic link (always): POST /api/auth/request-link emails a one-click
+ *    link — or, when the instance has no email provider configured
+ *    (email_delivery === "log"), writes it to the server log instead.
+ *  - Account password (always): POST /api/auth/token, for accounts whose
+ *    password was set by the operator (manage.py create-user --password).
+ *  - Site password (only when SITE_PASSWORD is set): POST
+ *    /api/auth/site-password — the single-user shared credential.
+ *
+ * Framework-free client script, same style as admin.astro. Magic-link
+ * sessions are established later on /auth/verify; the password flows store
+ * the session here directly (same localStorage key as verify.astro).
  */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { fetchMeta } from "../lib/api";
@@ -18,81 +26,161 @@ import { fetchMeta } from "../lib/api";
 const meta = await fetchMeta().catch(() => null);
 const allowSignup = meta?.allow_public_signup ?? true;
 const codeRequired = meta?.signup_code_required ?? true;
+// Site-password defaults to hidden when meta is unreachable (most instances
+// don't enable it); the always-on methods stay visible regardless.
+const sitePassword = meta?.auth_methods?.site_password ?? false;
+const logDelivery = meta?.email_delivery === "log";
 ---
 
 <BaseLayout title="Sign in — Vibedeck">
   <main class="login">
     <h1 class="login__title">Sign in to Vibedeck</h1>
-    <p class="login__lead">
-      Enter your email and we'll send you a one-click sign-in link — no password
-      needed.{allowSignup && codeRequired ? " Creating a new account requires an invite code." : ""}
-    </p>
 
-    <form class="login__form" data-login-form>
-      <label class="login__label" for="email">Email</label>
-      <input
-        class="login__input"
-        id="email"
-        type="email"
-        data-email
-        required
-        autocomplete="email"
-        placeholder="you@example.com"
-      />
+    <section class="login__method">
+      <h2 class="login__subtitle">Email me a sign-in link</h2>
+      <p class="login__lead">
+        {logDelivery
+          ? "This instance doesn't send email — the sign-in link is written to the server log instead. Request a link, then ask the site operator for it (or read it from the log yourself)."
+          : "Enter your email and we'll send you a one-click sign-in link — no password needed."}{allowSignup && codeRequired ? " Creating a new account requires an invite code." : ""}
+      </p>
 
-      {allowSignup && codeRequired && (
-        <>
-          <label class="login__label" for="code">Invite code <span class="login__hint">(new accounts only)</span></label>
-          <input
-            class="login__input"
-            id="code"
-            type="text"
-            data-code
-            autocomplete="off"
-            placeholder="Leave blank if you already have an account"
-          />
-        </>
-      )}
-      {allowSignup && (
-        <>
-          <label class="login__label" for="handle">Handle <span class="login__hint">(new accounts only)</span></label>
-          <input
-            class="login__input"
-            id="handle"
-            type="text"
-            data-handle
-            autocomplete="off"
-            pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]"
-            minlength="2"
-            maxlength="63"
-            placeholder="your public name, e.g. alice-w"
-          />
-          <p class="login__fieldnote">
-            Your handle is your public address here — lowercase letters,
-            numbers, and hyphens. It can't be changed later.
+      <form class="login__form" data-login-form>
+        <label class="login__label" for="email">Email</label>
+        <input
+          class="login__input"
+          id="email"
+          type="email"
+          data-email
+          required
+          autocomplete="email"
+          placeholder="you@example.com"
+        />
+
+        {allowSignup && codeRequired && (
+          <>
+            <label class="login__label" for="code">Invite code <span class="login__hint">(new accounts only)</span></label>
+            <input
+              class="login__input"
+              id="code"
+              type="text"
+              data-code
+              autocomplete="off"
+              placeholder="Leave blank if you already have an account"
+            />
+          </>
+        )}
+        {allowSignup && (
+          <>
+            <label class="login__label" for="handle">Handle <span class="login__hint">(new accounts only)</span></label>
+            <input
+              class="login__input"
+              id="handle"
+              type="text"
+              data-handle
+              autocomplete="off"
+              pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]"
+              minlength="2"
+              maxlength="63"
+              placeholder="your public name, e.g. alice-w"
+            />
+            <p class="login__fieldnote">
+              Your handle is your public address here — lowercase letters,
+              numbers, and hyphens. It can't be changed later.
+            </p>
+          </>
+        )}
+
+        <button class="login__btn" type="submit" data-submit>
+          {logDelivery ? "Request a sign-in link" : "Email me a link"}
+        </button>
+      </form>
+
+      <p class="login__msg" data-msg role="status" hidden></p>
+    </section>
+
+    <div class="login__divider" role="separator">or</div>
+
+    <section class="login__method">
+      <h2 class="login__subtitle">Sign in with a password</h2>
+      <p class="login__lead">
+        For accounts with a password set by the site operator.
+      </p>
+
+      <form class="login__form" data-password-form>
+        <label class="login__label" for="pw-email">Email</label>
+        <input
+          class="login__input"
+          id="pw-email"
+          type="email"
+          data-pw-email
+          required
+          autocomplete="email"
+          placeholder="you@example.com"
+        />
+        <label class="login__label" for="pw-password">Password</label>
+        <input
+          class="login__input"
+          id="pw-password"
+          type="password"
+          data-pw-password
+          required
+          autocomplete="current-password"
+        />
+        <button class="login__btn" type="submit" data-pw-submit>Sign in</button>
+      </form>
+
+      <p class="login__msg" data-pw-msg role="status" hidden></p>
+    </section>
+
+    {sitePassword && (
+      <>
+        <div class="login__divider" role="separator">or</div>
+
+        <section class="login__method">
+          <h2 class="login__subtitle">Sign in with the site password</h2>
+          <p class="login__lead">
+            Single-user instance? Use the shared site password from this
+            site's configuration.
           </p>
-        </>
-      )}
 
-      <button class="login__btn" type="submit" data-submit>Email me a link</button>
-    </form>
+          <form class="login__form" data-site-form>
+            <label class="login__label" for="site-password">Site password</label>
+            <input
+              class="login__input"
+              id="site-password"
+              type="password"
+              data-site-password
+              required
+              autocomplete="current-password"
+            />
+            <button class="login__btn" type="submit" data-site-submit>Sign in</button>
+          </form>
 
-    <p class="login__msg" data-msg role="status" hidden></p>
+          <p class="login__msg" data-site-msg role="status" hidden></p>
+        </section>
+      </>
+    )}
   </main>
 </BaseLayout>
 
 <script>
   const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
 
-  function setMsg(text: string, kind: "ok" | "err") {
-    const msg = $<HTMLElement>("[data-msg]");
+  function setMsg(sel: string, text: string, kind: "ok" | "err") {
+    const msg = $<HTMLElement>(sel);
     if (!msg) return;
     msg.textContent = text;
     msg.dataset.kind = kind;
     msg.hidden = false;
   }
 
-  function initLogin() {
+  /** Store the session JWT and enter the app — same as /auth/verify. */
+  function startSession(token: string) {
+    localStorage.setItem("vd_session", token);
+    location.replace("/decks");
+  }
+
+  function initMagicLink() {
     const form = $<HTMLFormElement>("[data-login-form]");
     const btn = $<HTMLButtonElement>("[data-submit]");
     form?.addEventListener("submit", async (e) => {
@@ -112,25 +200,96 @@ const codeRequired = meta?.signup_code_required ?? true;
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          setMsg(data.message ?? "Check your email for your sign-in link.", "ok");
+          setMsg("[data-msg]", data.message ?? "Check your email for your sign-in link.", "ok");
           form?.reset();
         } else if (res.status === 403) {
           setMsg(
+            "[data-msg]",
             data.detail ?? "A valid invite code is required to create an account.",
             "err",
           );
         } else {
-          setMsg(data.detail ?? "Something went wrong. Please try again.", "err");
+          setMsg("[data-msg]", data.detail ?? "Something went wrong. Please try again.", "err");
         }
       } catch {
-        setMsg("Network error. Please try again.", "err");
+        setMsg("[data-msg]", "Network error. Please try again.", "err");
       } finally {
         if (btn) btn.disabled = false;
       }
     });
   }
 
-  initLogin();
+  function initPassword() {
+    const form = $<HTMLFormElement>("[data-password-form]");
+    const btn = $<HTMLButtonElement>("[data-pw-submit]");
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $<HTMLInputElement>("[data-pw-email]")?.value.trim() ?? "";
+      const password = $<HTMLInputElement>("[data-pw-password]")?.value ?? "";
+      if (!email || !password) return;
+
+      if (btn) btn.disabled = true;
+      try {
+        // OAuth2 password flow: form-encoded, email travels as `username`.
+        const res = await fetch("/api/auth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ username: email, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.access_token) {
+          startSession(data.access_token);
+        } else {
+          setMsg(
+            "[data-pw-msg]",
+            data.detail ?? "Incorrect email or password.",
+            "err",
+          );
+        }
+      } catch {
+        setMsg("[data-pw-msg]", "Network error. Please try again.", "err");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  }
+
+  function initSitePassword() {
+    const form = $<HTMLFormElement>("[data-site-form]");
+    const btn = $<HTMLButtonElement>("[data-site-submit]");
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = $<HTMLInputElement>("[data-site-password]")?.value ?? "";
+      if (!password) return;
+
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch("/api/auth/site-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.access_token) {
+          startSession(data.access_token);
+        } else {
+          setMsg(
+            "[data-site-msg]",
+            data.detail ?? "Incorrect site password.",
+            "err",
+          );
+        }
+      } catch {
+        setMsg("[data-site-msg]", "Network error. Please try again.", "err");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  }
+
+  initMagicLink();
+  initPassword();
+  initSitePassword();
 </script>
 
 <style>
@@ -140,12 +299,32 @@ const codeRequired = meta?.signup_code_required ?? true;
     padding: clamp(2rem, 8vw, 4rem) 1.5rem;
   }
   .login__title {
-    margin: 0 0 0.75rem;
+    margin: 0 0 1.5rem;
+  }
+  .login__subtitle {
+    font-size: 1.05rem;
+    margin: 0 0 0.5rem;
   }
   .login__lead {
     color: var(--vd-text-muted);
     line-height: 1.6;
-    margin: 0 0 2rem;
+    margin: 0 0 1.25rem;
+  }
+  .login__divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 2rem 0;
+    color: var(--vd-text-muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .login__divider::before,
+  .login__divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--vd-card-border);
   }
   .login__form {
     display: flex;

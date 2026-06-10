@@ -119,3 +119,17 @@ Decks are managed from the server (see the root README): drop a `.md` file in
 `decks/` and run `python manage.py reindex` from `backend/`, or upload via the
 auth-gated `/admin` surface. Other commands: `list-decks`, `delete-deck`,
 `create-user`, `delete-user`.
+
+## Magic links without an email provider
+
+If no email provider is configured (`RESEND_API_KEY`/`SMTP_HOST` both unset),
+magic sign-in links are written to the API service's log instead of emailed —
+read them with:
+
+```bash
+journalctl -u vibedeck-api -n 50 | grep "auth/verify"
+```
+
+The API logs a startup warning when running in production this way. For a
+single-user instance, setting `SITE_PASSWORD` in `.env` is usually the more
+convenient option (see the root README's "Signing in" section).

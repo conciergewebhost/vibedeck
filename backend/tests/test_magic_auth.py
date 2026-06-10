@@ -203,6 +203,39 @@ class TestRequestLink(_AppTestCase):
         self.assertEqual(resp.status_code, 403)
         sender.assert_not_called()
 
+    @mock.patch("routers.auth.send_magic_link")
+    def test_email_mode_message_points_at_the_inbox(self, sender):
+        self.add_user("known@e.com")
+        resp = self.client.post(
+            "/api/auth/request-link", json={"email": "known@e.com"}
+        )
+        self.assertIn("email", resp.json()["message"])
+
+
+class TestRequestLinkLogDelivery(_AppTestCase):
+    """With no email provider configured, the link goes to the server log
+    and the response message must say so (not "check your email")."""
+
+    def setUp(self):
+        super().setUp()
+        self._prev_resend = settings.RESEND_API_KEY
+        settings.RESEND_API_KEY = ""  # no SMTP either → log delivery
+
+    def tearDown(self):
+        settings.RESEND_API_KEY = self._prev_resend
+        super().tearDown()
+
+    def test_link_is_logged_and_message_points_at_the_log(self):
+        self.add_user("known@e.com")
+        # Real sender, no mock: log delivery touches no network.
+        with self.assertLogs("services.email", level="WARNING") as captured:
+            resp = self.client.post(
+                "/api/auth/request-link", json={"email": "known@e.com"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("server log", resp.json()["message"])
+        self.assertIn(f"{settings.BASE_URL}/auth/verify?token=", "\n".join(captured.output))
+
 
 class TestSlidingWindowLimiter(unittest.TestCase):
     def test_allows_up_to_limit_then_blocks(self):

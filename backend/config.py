@@ -8,6 +8,7 @@ Run the backend from the backend/ directory so the import paths below
 from enum import Enum
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,14 +58,28 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
 
     # Passwordless (magic-link) signup/login. NEW_USER_CODE gates account
-    # creation during the testing phase; existing users skip it. Email is
-    # sent via the Resend HTTP API.
+    # creation during the testing phase; existing users skip it.
     NEW_USER_CODE: str
-    RESEND_API_KEY: str
-    EMAIL_FROM_ADDRESS: str
+    # Magic-link email delivery is optional and auto-detected (see
+    # email_delivery below): set RESEND_API_KEY for Resend, or SMTP_HOST for
+    # any SMTP server. With neither, sign-in links are written to the server
+    # log instead of emailed — fine for single-user or dev deployments.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM_ADDRESS: str = ""
     EMAIL_FROM_NAME: str = "Vibedeck"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True  # STARTTLS; disable only for a trusted local relay
     # Magic links are short-lived signed JWTs (no DB token table).
     MAGIC_LINK_EXPIRE_MINUTES: int = 15
+
+    # Optional shared password for the login page; signing in with it issues
+    # a session as the UPLOAD_OWNER_EMAIL account. Meant for single-user
+    # deployments that don't want email or per-user passwords. Blank = the
+    # login method is disabled (and hidden from the UI via /api/meta).
+    SITE_PASSWORD: str = ""
 
     # Per-IP rate limits on POST /api/auth/request-link (sliding 1-hour
     # window). The overall cap blunts email-spam and general hammering; the
@@ -88,9 +103,47 @@ class Settings(BaseSettings):
     REPORT_QUARANTINE_THRESHOLD: int = 3
     RATE_LIMIT_REPORTS_PER_HOUR: int = 5
 
+    @model_validator(mode="after")
+    def _check_email_config(self) -> "Settings":
+        """Fail fast on contradictory email settings instead of failing on
+        the first send. Having neither provider is fine (log delivery)."""
+        if self.RESEND_API_KEY and self.SMTP_HOST:
+            raise ValueError(
+                "Configure either RESEND_API_KEY or SMTP_HOST, not both — "
+                "Vibedeck can't tell which provider should deliver email."
+            )
+        if (self.RESEND_API_KEY or self.SMTP_HOST) and not self.EMAIL_FROM_ADDRESS:
+            raise ValueError(
+                "EMAIL_FROM_ADDRESS is required when an email provider "
+                "(RESEND_API_KEY or SMTP_HOST) is configured."
+            )
+        if (self.SMTP_USERNAME or self.SMTP_PASSWORD) and not self.SMTP_HOST:
+            raise ValueError(
+                "SMTP_USERNAME/SMTP_PASSWORD are set but SMTP_HOST is not — "
+                "set SMTP_HOST or remove the SMTP credentials."
+            )
+        return self
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def email_delivery(self) -> str:
+        """Which backend services/email.py sends through: "resend", "smtp",
+        or "log" (no provider configured — links go to the server log).
+        A property, not a stored field, so tests can flip the singleton's
+        provider settings at runtime (same pattern as the EDITION flags)."""
+        if self.RESEND_API_KEY:
+            return "resend"
+        if self.SMTP_HOST:
+            return "smtp"
+        return "log"
+
+    @property
+    def site_password_enabled(self) -> bool:
+        """Whether the shared site-password login method is available."""
+        return bool(self.SITE_PASSWORD)
 
     # ── Derived edition feature flags ─────────────────────────────────────
     # Computed from EDITION so the editions differ by configuration, not by a

@@ -122,6 +122,15 @@ Defined in `.env`, never committed. Use `.env.example` as the template.
 | `QUOTA_MAX_DECKS` / `QUOTA_MAX_THEMES` | Per-user creation caps, server edition only (optional — default 50 / 20; admins exempt) |
 | `REPORT_QUARANTINE_THRESHOLD` | Distinct reader reports that auto-quarantine a deck (optional — default 3) |
 | `NEW_USER_CODE` | Seed/fallback invite code — runtime on/off + code changes live in the admin Settings tab (`site_settings` table) |
+| `RESEND_API_KEY` | Resend API key for magic-link email (optional — see email delivery note below) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_TLS` | SMTP alternative to Resend (optional; configure at most one provider) |
+| `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` | Sender identity — `EMAIL_FROM_ADDRESS` required iff Resend or SMTP is configured |
+| `SITE_PASSWORD` | Optional shared login password (single-user instances); sessions issue as `UPLOAD_OWNER_EMAIL` |
+
+**Email delivery is auto-detected** (`settings.email_delivery`): Resend if
+`RESEND_API_KEY`, else SMTP if `SMTP_HOST`, else **log mode** — magic links are
+written to the server log instead of emailed. Login methods offered on `/login`
+follow the same auto-detection via `/api/meta` (`auth_methods`).
 
 ---
 

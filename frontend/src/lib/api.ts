@@ -103,6 +103,14 @@ export interface SiteMeta {
   quotas_enabled: boolean;
   user_spaces_enabled: boolean;
   signup_code_required: boolean;
+  // Optional so a frontend built against an older backend still typechecks;
+  // pages fall back to showing magic-link + password and hiding site-password.
+  auth_methods?: {
+    magic_link: boolean;
+    password: boolean;
+    site_password: boolean;
+  };
+  email_delivery?: "resend" | "smtp" | "log";
 }
 
 /** Non-secret deployment flags (edition + feature toggles) for UI adaptation. */

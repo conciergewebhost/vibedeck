@@ -17,6 +17,7 @@ from models import User
 from schemas.auth import (
     MessageOut,
     RequestLinkInput,
+    SitePasswordRequest,
     Token,
     UploadTokenRequest,
     VerifyInput,
@@ -38,10 +39,11 @@ from services.ratelimit import SlidingWindowLimiter, client_ip
 router = APIRouter()
 
 _WINDOW_SECONDS = 3600.0
-# Per-IP limiters for the magic-link request endpoint. Module-level so they
-# persist across requests within the (single) worker process.
+# Per-IP limiters, module-level so they persist across requests within the
+# (single) worker process.
 _link_limiter = SlidingWindowLimiter()  # all request-link calls
 _bad_code_limiter = SlidingWindowLimiter()  # only invalid-code signup attempts
+_password_limiter = SlidingWindowLimiter()  # password + site-password logins
 
 
 def _too_many(retry_after: int, detail: str) -> HTTPException:
@@ -52,12 +54,40 @@ def _too_many(retry_after: int, detail: str) -> HTTPException:
     )
 
 
+def _check_login_rate(request: Request) -> None:
+    """Per-IP cap shared by the credential-based login endpoints, throttling
+    password and site-password guessing alike."""
+    allowed, retry_after = _password_limiter.hit(
+        client_ip(request), settings.RATE_LIMIT_REQUESTS_PER_HOUR, _WINDOW_SECONDS
+    )
+    if not allowed:
+        raise _too_many(retry_after, "Too many login attempts. Please try again later.")
+
+
+def _issue_owner_token(db: Session) -> Token:
+    """Mint a session JWT for the configured owner account (shared-credential
+    flows: UPLOAD_TOKEN and SITE_PASSWORD both resolve to this user)."""
+    owner = db.scalar(
+        select(User).where(User.email == settings.UPLOAD_OWNER_EMAIL)
+    )
+    if owner is None or not owner.is_active:
+        # Misconfiguration: the configured owner account must exist & be active.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Owner account not provisioned",
+        )
+    record_login(db, owner)
+    return Token(access_token=create_access_token(subject=owner.email))
+
+
 @router.post("/token", response_model=Token)
 def login(
+    request: Request,
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ) -> Token:
     """Exchange email (as `username`) + password for a JWT access token."""
+    _check_login_rate(request)
     user = authenticate_user(db, form.username, form.password)
     if user is None:
         raise HTTPException(
@@ -67,6 +97,34 @@ def login(
         )
     record_login(db, user)
     return Token(access_token=create_access_token(subject=user.email))
+
+
+@router.post("/site-password", response_model=Token)
+def site_password_login(
+    body: SitePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Token:
+    """Exchange the shared SITE_PASSWORD for a session as the owner account.
+
+    The single-user login method: no email delivery, no per-user passwords.
+    404 when SITE_PASSWORD is unset — the method simply doesn't exist on
+    this instance (and /api/meta tells the UI not to offer it).
+    """
+    if not settings.site_password_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Site-password login is not enabled on this instance.",
+        )
+    _check_login_rate(request)
+
+    submitted = body.password.encode("utf-8")
+    expected = settings.SITE_PASSWORD.encode("utf-8")
+    if not hmac.compare_digest(submitted, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect site password"
+        )
+    return _issue_owner_token(db)
 
 
 @router.post("/upload-token", response_model=Token)
@@ -83,18 +141,7 @@ def upload_token(body: UploadTokenRequest, db: Session = Depends(get_db)) -> Tok
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid upload token"
         )
-
-    owner = db.scalar(
-        select(User).where(User.email == settings.UPLOAD_OWNER_EMAIL)
-    )
-    if owner is None or not owner.is_active:
-        # Misconfiguration: the configured owner account must exist & be active.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Owner account not provisioned",
-        )
-    record_login(db, owner)
-    return Token(access_token=create_access_token(subject=owner.email))
+    return _issue_owner_token(db)
 
 
 @router.post("/request-link", response_model=MessageOut)
@@ -190,6 +237,12 @@ def request_link(
             detail="Could not send the sign-in email. Please try again shortly.",
         )
 
+    if settings.email_delivery == "log":
+        # No email provider configured: the link went to the server log, so
+        # telling the user to check their inbox would strand them.
+        return MessageOut(
+            message="Your sign-in link has been written to the server log."
+        )
     return MessageOut(message="Check your email for your sign-in link.")
 
 

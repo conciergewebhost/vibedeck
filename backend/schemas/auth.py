@@ -14,6 +14,12 @@ class UploadTokenRequest(BaseModel):
     token: str
 
 
+class SitePasswordRequest(BaseModel):
+    """Body for the shared site password login (POST /api/auth/site-password)."""
+
+    password: str
+
+
 class RequestLinkInput(BaseModel):
     """Body for POST /api/auth/request-link.
 

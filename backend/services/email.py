@@ -1,34 +1,98 @@
-"""Email delivery via the Resend HTTP API.
+"""Email delivery with three interchangeable backends.
 
-Kept deliberately small: one synchronous POST per send. We call Resend's
-REST endpoint directly with httpx rather than pulling in their SDK — the
-payload is trivial and this avoids another dependency.
+Which backend runs is auto-detected from settings (settings.email_delivery):
 
-The sender identity comes from EMAIL_FROM_NAME/EMAIL_FROM_ADDRESS; the
-from-address domain must be verified in Resend or sends are rejected.
+- "resend" — Resend's HTTP API, called directly with httpx rather than their
+  SDK (the payload is trivial and this avoids another dependency). The
+  from-address domain must be verified in Resend or sends are rejected.
+- "smtp"   — any SMTP server via the stdlib, for self-hosters without a
+  Resend account (Mailgun, a Gmail app password, local Postfix, …).
+- "log"    — no provider configured: the plain-text body (which contains the
+  magic link) is written to the server log. This keeps zero-email
+  deployments usable — the operator copies the link from journalctl.
+
+All sends are synchronous, one message at a time.
 """
+
+import logging
+import smtplib
+from email.message import EmailMessage
 
 import httpx
 
 from config import settings
 
+logger = logging.getLogger(__name__)
+
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 _TIMEOUT_SECONDS = 10.0
 
 
-def _send(to: str, subject: str, html: str) -> None:
-    """POST a single transactional email to Resend; raise on failure."""
+def _send(to: str, subject: str, html: str, text: str) -> None:
+    """Deliver one transactional email via the configured backend.
+
+    `text` is the plain-text alternative; in log mode it's the only thing
+    recorded, so it must carry everything the recipient needs (the link).
+    """
+    delivery = settings.email_delivery
+    if delivery == "resend":
+        _send_resend(to=to, subject=subject, html=html, text=text)
+    elif delivery == "smtp":
+        _send_smtp(to=to, subject=subject, html=html, text=text)
+    else:
+        _send_log(to=to, subject=subject, text=text)
+
+
+def _send_resend(to: str, subject: str, html: str, text: str) -> None:
+    """POST a single email to Resend; raise on failure."""
     payload = {
         "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
         "to": [to],
         "subject": subject,
         "html": html,
+        "text": text,
     }
     headers = {"Authorization": f"Bearer {settings.RESEND_API_KEY}"}
     resp = httpx.post(
         _RESEND_ENDPOINT, json=payload, headers=headers, timeout=_TIMEOUT_SECONDS
     )
     resp.raise_for_status()
+
+
+def _send_smtp(to: str, subject: str, html: str, text: str) -> None:
+    """Send one email through the configured SMTP server; raise on failure."""
+    msg = EmailMessage()
+    msg["From"] = f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>"
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+
+    # smtplib is referenced via the module so tests can monkeypatch
+    # services.email.smtplib.SMTP with a recording fake.
+    with smtplib.SMTP(
+        settings.SMTP_HOST, settings.SMTP_PORT, timeout=_TIMEOUT_SECONDS
+    ) as server:
+        if settings.SMTP_TLS:
+            server.starttls()
+        if settings.SMTP_USERNAME:
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        server.send_message(msg)
+
+
+def _send_log(to: str, subject: str, text: str) -> None:
+    """No email provider configured: record the message in the server log.
+
+    WARNING level so the line survives conservative logging configs — for a
+    zero-email deployment this IS the delivery channel, not diagnostics.
+    """
+    logger.warning(
+        "Email delivery is in log mode (no provider configured). "
+        "Message for %s — %s:\n%s",
+        to,
+        subject,
+        text,
+    )
 
 
 def send_magic_link(to: str, link: str, is_signup: bool) -> None:
@@ -65,7 +129,14 @@ def send_magic_link(to: str, link: str, is_signup: bool) -> None:
   <p style="margin:0;font-size:0.8rem;color:#999;word-break:break-all">{link}</p>
 </div>"""
 
-    _send(to=to, subject=subject, html=html)
+    text = (
+        f"{intro}\n\n"
+        f"{cta}: {link}\n\n"
+        f"This link expires in {expires} minutes. "
+        "If you didn't request it, you can ignore this email.\n"
+    )
+
+    _send(to=to, subject=subject, html=html, text=text)
 
 
 def send_moderation_digest(
@@ -122,4 +193,15 @@ def send_moderation_digest(
   </p>
 </div>"""
 
-    _send(to=to, subject=subject, html=html)
+    text = (
+        "Vibedeck — daily moderation digest\n\n"
+        f"Flagged decks awaiting review: {queue_size}\n"
+        f"Decks with standing reader reports: {open_reports}\n"
+        f"Blocked in the last 24 h: {blocked_24h}\n"
+        f"Newly flagged in the last 24 h: {flagged_24h}\n"
+        f"Reports filed in the last 24 h: {reports_24h}\n"
+        f"New accounts in the last 24 h: {signups_24h}\n\n"
+        f"Review queue: {queue_url}\n"
+    )
+
+    _send(to=to, subject=subject, html=html, text=text)

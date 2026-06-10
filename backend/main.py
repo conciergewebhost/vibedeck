@@ -7,6 +7,8 @@ Routers are mounted under /api so Caddy can split frontend (Astro SSR)
 from backend traffic by path prefix. See Caddyfile.example.
 """
 
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -15,6 +17,15 @@ from config import settings
 from database import get_db
 from routers import admin, auth, decks, reports, themes, topics, users
 from services import site_settings
+
+logger = logging.getLogger(__name__)
+
+if settings.is_production and settings.email_delivery == "log":
+    logger.warning(
+        "Email delivery is in LOG mode: magic sign-in links will be written "
+        "to the server log instead of emailed. Configure RESEND_API_KEY or "
+        "SMTP_HOST (with EMAIL_FROM_ADDRESS) to send real email."
+    )
 
 app = FastAPI(
     title="Vibedeck API",
@@ -75,4 +86,14 @@ def meta(db: Session = Depends(get_db)) -> dict[str, object]:
         "quotas_enabled": settings.quotas_enabled,
         "user_spaces_enabled": settings.user_spaces_enabled,
         "signup_code_required": site_settings.invite_code_required(db),
+        # Which login methods the login page should offer. Magic link and
+        # password are always on; site-password only if SITE_PASSWORD is set.
+        "auth_methods": {
+            "magic_link": True,
+            "password": True,
+            "site_password": settings.site_password_enabled,
+        },
+        # "resend" | "smtp" | "log" — log mode means sign-in links land in
+        # the server log, so the UI adjusts its magic-link copy.
+        "email_delivery": settings.email_delivery,
     }

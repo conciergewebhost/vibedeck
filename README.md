@@ -45,8 +45,11 @@ happens to work beautifully in a presentation context.
 - **Two editions from one codebase** — an `EDITION` setting selects **standalone**
   (single user, flat URLs) or **server** (multi-user host). See
   [`docs/EDITIONS.md`](docs/EDITIONS.md).
-- **Auth** — passwordless magic-link login, invite-gated signup with chosen
-  handles, and a session-first `/admin` surface (shared-token fallback).
+- **Auth** — three login methods, auto-detected from config: magic links
+  (Resend, any SMTP server, or — with no email provider — links written to the
+  server log), per-account passwords, and an optional shared site password for
+  single-user instances. Invite-gated signup with chosen handles, and a
+  session-first `/admin` surface (shared-token fallback).
 - **Server-side management CLI** — provision users, promote/demote, reindex,
   tidy files, delete decks.
 
@@ -134,7 +137,12 @@ Edit `.env` and set:
 | `ENVIRONMENT` | `development` |
 | `EDITION` | `standalone` (single user, no public signup) or `server` (multi-user host); defaults to `standalone` |
 | `NEW_USER_CODE` | invite code that gates new sign-ups (seed value; changeable at runtime from the admin Settings tab) |
-| `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` | [Resend](https://resend.com) credentials for magic-link sign-in emails. Required to start (placeholders boot fine), but browser sign-in needs real values |
+
+Everything else is optional — see [Signing in](#signing-in) below and the
+comments in `.env.example` for email delivery (`RESEND_API_KEY` or `SMTP_*`)
+and the single-user `SITE_PASSWORD`. With no email settings at all, magic
+sign-in links are written to the server log instead of emailed, so a fresh
+clone is fully usable without any email account.
 
 ### 4. Backend
 
@@ -169,6 +177,35 @@ npm run dev                                          # serves http://localhost:4
 ```
 
 Open **http://localhost:4321** — you should see the sample decks.
+
+---
+
+## Signing in
+
+The `/login` page offers up to three methods; which ones appear is
+auto-detected from your `.env` (no extra switch to set):
+
+1. **Magic link** — always available. How the link reaches you depends on
+   what's configured:
+   - `RESEND_API_KEY` set → emailed via [Resend](https://resend.com);
+   - `SMTP_HOST` set → emailed via your SMTP server (`SMTP_PORT`,
+     `SMTP_USERNAME`/`SMTP_PASSWORD`, `SMTP_TLS`);
+   - neither → the link is **written to the server log** (dev: the uvicorn
+     console; production: `journalctl -u <api-service>`). Zero email setup,
+     at the cost of the operator fishing links out of the log.
+
+   Configure at most one provider; `EMAIL_FROM_ADDRESS` is required with
+   either. Misconfigured combinations fail at startup with a clear error.
+2. **Account password** — always available, for accounts that have one:
+   `python manage.py create-user you@example.com --password ...` (run from
+   `backend/`). There is no self-serve password signup; magic-link signup is
+   the only public registration path.
+3. **Site password** — only when `SITE_PASSWORD` is set. A shared password
+   that signs you in as the `UPLOAD_OWNER_EMAIL` account — the simplest
+   option for a single-user (standalone) instance.
+
+OAuth/OIDC and passkeys are not implemented yet.
+<!-- TODO(post-v2): OAuth/OIDC (GitHub/Google) and passkey login. -->
 
 ---
 

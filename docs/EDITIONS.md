@@ -21,7 +21,10 @@ codebase.
   `indexing.py`). This is a genuine differentiator — portability, no lock-in, Git-friendly. Keep it.
 - Clean layering: thin routers → services → SQLAlchemy/Alembic; Astro SSR front end; Caddy + systemd
   ops. Easy to extend.
-- **Auth**: JWT + passwordless magic-link login, invite-gated signup, bcrypt (`services/auth.py`).
+- **Auth**: JWT + three edition-independent login methods, auto-detected from config
+  (`services/auth.py`, `routers/auth.py`): magic links (delivered via Resend, SMTP, or — with no
+  email provider — the server log), per-account passwords (bcrypt, set via `manage.py`), and an
+  optional shared `SITE_PASSWORD` (most useful in standalone). Invite-gated signup.
 - **Multi-user ownership**: users own decks (`Deck.owner_id`) and per-user themes; user endpoints are
   owner-scoped (`/api/decks/mine`).
 - **Form-based authoring**: a deck builder (`/account/build`, per-card-type fields) and a theme builder
