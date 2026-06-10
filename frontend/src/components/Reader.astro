@@ -105,20 +105,42 @@ const total = deck.cards.length;
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
-    // Per-card bullet lists + how many are currently revealed. The count
-    // persists, so returning to a half-read card resumes where it was.
+    // Per-card bullet lists + how many reveal steps are currently shown.
+    // The count persists, so returning to a half-read card resumes where
+    // it was.
     const bullets: HTMLElement[][] = cards.map((c) =>
       revealMode ? Array.from(c.querySelectorAll<HTMLElement>("li")) : [],
     );
+    // Content after a card's last bullet list is gated behind the bullets:
+    // hidden until every bullet is shown, then revealed by one further
+    // advance — so the final bullet still lands on its own.
+    const trailing: HTMLElement[][] = cards.map((c, i) => {
+      if (bullets[i].length === 0) return [];
+      const body = c.querySelector<HTMLElement>(".card-body");
+      if (!body) return [];
+      const kids = Array.from(body.children) as HTMLElement[];
+      const lastList = kids.reduce(
+        (last, el, n) => (el.matches("ul, ol") ? n : last),
+        -1,
+      );
+      return lastList === -1 ? [] : kids.slice(lastList + 1);
+    });
+    // Reveal steps per card: one per bullet, plus one for a trailing block.
+    const steps = (i: number) =>
+      bullets[i].length + (trailing[i].length ? 1 : 0);
     const revealed: number[] = cards.map(() => 0);
 
     function applyReveal(i: number) {
       bullets[i].forEach((li, n) =>
         li.classList.toggle("vd-li-hidden", n >= revealed[i]),
       );
+      const showTrailing = revealed[i] > bullets[i].length;
+      trailing[i].forEach((el) =>
+        el.classList.toggle("vd-li-hidden", !showTrailing),
+      );
     }
     function revealAll(i: number) {
-      revealed[i] = bullets[i].length;
+      revealed[i] = steps(i);
       applyReveal(i);
     }
     if (revealMode) cards.forEach((_, i) => applyReveal(i));
@@ -153,18 +175,24 @@ const total = deck.cards.length;
       if (currentEl) currentEl.textContent = String(idx + 1);
     }
 
-    // next: with reveal on, surface the card's next bullet first; advance
-    // to the next card only once everything on this one is shown.
+    // next: with reveal on, surface the card's next reveal step first (a
+    // bullet, or finally the post-bullets content); advance to the next
+    // card only once everything on this one is shown.
     function next() {
-      if (revealMode && revealed[idx] < bullets[idx].length) {
+      if (revealMode && revealed[idx] < steps(idx)) {
         revealed[idx] += 1;
-        const li = bullets[idx][revealed[idx] - 1];
-        li.classList.remove("vd-li-hidden");
+        const fresh =
+          revealed[idx] <= bullets[idx].length
+            ? [bullets[idx][revealed[idx] - 1]]
+            : trailing[idx];
+        applyReveal(idx);
         if (!reduceMotion && transition !== "none")
-          li.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: 150,
-            easing: "ease-out",
-          });
+          fresh.forEach((el) =>
+            el.animate([{ opacity: 0 }, { opacity: 1 }], {
+              duration: 150,
+              easing: "ease-out",
+            }),
+          );
         return;
       }
       show(idx + 1, { dir: 1 });
@@ -256,9 +284,9 @@ const total = deck.cards.length;
        card is taller than the stage. */
     margin: auto;
   }
-  /* Progressive bullet reveal: hidden-but-laid-out so nothing reflows as
-     items appear. Global — the lis live in set:html markdown content that
-     scoped styles can't reach. */
+  /* Progressive reveal (bullets + post-bullet content): hidden-but-laid-out
+     so nothing reflows as items appear. Global — the elements live in
+     set:html markdown content that scoped styles can't reach. */
   .reader :global(.vd-li-hidden) {
     visibility: hidden;
   }

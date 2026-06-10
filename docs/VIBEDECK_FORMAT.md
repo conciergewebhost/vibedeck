@@ -99,7 +99,7 @@ rejected.
 | `description` | string | — | One-line summary shown in index listings |
 | `visibility` | `public` \| `unlisted` \| `private` | `public` | `public` is listed in the library; `unlisted` is readable by anyone with the link; `private` renders only for the signed-in owner |
 | `transition` | `slide` \| `fade` \| `none` | `slide` | Card-change animation in the reader |
-| `reveal` | `bullets` | off | Bullet-list items reveal **one per advance**: each press of "next" surfaces the next bullet on the current card before moving to the next card |
+| `reveal` | `bullets` | off | Bullet-list items reveal **one per advance**: each press of "next" surfaces the next bullet on the current card before moving on. Content after the card's last bullet list stays hidden until every bullet is shown, then one further advance reveals it |
 
 Any other value for `visibility` is rejected; unknown `transition` values
 fall back to `slide`.
@@ -259,7 +259,9 @@ Validity is the floor. These conventions are what make decks worth reading:
 - **Write for a phone.** Short paragraphs, no walls of text, headings that
   work at a glance. Desktop is the enhancement, not the target.
 - **With `reveal: bullets`,** order list items so each one lands alone —
-  the reader sees them one advance at a time.
+  the reader sees them one advance at a time. A closing line *after* the
+  bullets works well: it stays hidden until the list is complete, then
+  arrives as the card's final beat.
 - **Keywords:** 2–5 lowercase tags that group related decks within the
   topic.
 
