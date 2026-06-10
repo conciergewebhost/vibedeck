@@ -4,7 +4,7 @@ author: Rob Wall
 topic: vibedeck
 keywords: [authoring, format, markdown, reference]
 theme: operazione-stile
-description: A field guide to the parts of a VibeDeck markdown file — frontmatter, cards, and the five card types.
+description: A field guide to the parts of a VibeDeck markdown file — frontmatter, cards, the five card types, and the optional behavior switches.
 ---
 ---
 type: title
@@ -28,20 +28,31 @@ Blocks are separated by a line containing exactly three dashes: `---`.
 
 The first fenced block is the **deck frontmatter**. After that, blocks come in pairs — a card's frontmatter, then that card's body.
 
-Because the three-dash line *is* the separator, don't use it as a horizontal rule inside a card.
+Because the three-dash line *is* the separator, a card body can't contain one. Want a horizontal rule inside a card? Use `***` instead.
 ---
 type: concept
 ---
 ## Deck frontmatter
 
-The opening block is YAML that describes the whole deck:
+The opening block is YAML that describes the whole deck. Five fields are required:
 
 - **title** — the deck's name
 - **author** — who made it
 - **topic** — groups the deck in the library
 - **keywords** — a list, e.g. `[markdown, reference]`
 - **theme** — the visual style (you're reading `operazione-stile`)
-- **description** — an optional one-line summary
+
+Plus the optional **description** — a one-line summary for index listings.
+---
+type: concept
+---
+## Optional: behavior switches
+
+Three more optional frontmatter fields tune how the deck behaves:
+
+- **visibility** — `public` (listed), `unlisted` (link-only), or `private` (only you)
+- **transition** — the card-change animation: `slide`, `fade`, or `none`
+- **reveal: bullets** — bullet lists reveal one item per advance, so each point lands before the next appears
 ---
 type: concept
 ---
@@ -79,4 +90,5 @@ type: summary
 - Lead with a `title` card
 - Build the body from `concept` and `summary` cards
 - Punctuate with a `quote` or a `graphic`
-- Save it as a `.md` file and upload — that's a deck
+- Set `visibility`, `transition`, or `reveal` if the defaults aren't right
+- Save it as a `.md` file and upload — or skip the file and use the in-browser builder

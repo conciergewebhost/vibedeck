@@ -83,7 +83,7 @@ type: concept
 
 ## Card Types
 
-Vibedeck supports five card types in v1:
+Vibedeck supports five card types:
 
 **Title** — the opening card, large display treatment
 
@@ -111,13 +111,23 @@ That's the entire format. If you can write markdown, you can author a Vibedeck d
 type: concept
 ---
 
-## The Format
+## Or Author in the Browser
 
-A deck frontmatter block at the top defines the title, author, topic, keywords, and theme.
+You don't have to touch a file at all.
 
-Each card follows — separated by `---` — with its own type declaration and content.
+Sign in and the **deck builder** walks you through it card by card, with the right fields for each card type. Prefer raw markdown? The in-browser **editor** has a live preview.
 
-Title card. Concept cards. Summary cards. Quote cards. Graphic cards. That's the whole vocabulary.
+Not signed up yet? The **sandbox** lets anyone paste markdown and preview a deck instantly — nothing is saved, nothing is published.
+
+---
+type: concept
+---
+
+## The Reading Experience
+
+Readers move through a deck with swipes, arrow keys, or buttons — with a progress indicator and an index for jumping straight to a card.
+
+Authors can tune the feel from frontmatter: a **slide** or **fade** transition between cards, and **progressive bullet reveal**, where each advance surfaces the next point before moving on.
 
 ---
 type: concept
@@ -125,13 +135,31 @@ type: concept
 
 ## How Decks Are Organized
 
-Decks are grouped by **topic** — a slug that becomes part of the URL.
+Every author has a public handle and an author page:
 
-`vibedeck.online/z13` — all astrology decks
+`vibedeck.online/u/robwall` — everything by one author
 
-`vibedeck.online/tok` — all Theory of Knowledge decks
+Within that, decks are grouped by **topic**:
+
+`vibedeck.online/u/robwall/vibedeck` — this deck's topic
 
 Each deck also carries **keywords** for finer-grained thematic grouping within a topic.
+
+---
+type: concept
+---
+
+## Sharing — On Your Terms
+
+Each deck has a visibility setting:
+
+**Public** — listed in the library, visible to everyone
+
+**Unlisted** — anyone with the link can read it; it just isn't listed
+
+**Private** — only you, signed in
+
+And every public deck has an **embed widget**: a copy-paste snippet that drops the deck into any page that accepts HTML.
 
 ---
 type: concept
@@ -141,9 +169,9 @@ type: concept
 
 Vibedeck is open source under the MIT license.
 
-The codebase is yours to clone, deploy, and build on. Run your own instance for your own content — your deck content stays on your domain, building your authority, not ours.
+One codebase, two ways to run it: **standalone** — just you, on your own server — or **server** — a multi-user host with sign-ups, like `vibedeck.online`.
 
-`vibedeck.online` is the proof of concept. Your instance is the point.
+Your deck content stays on your domain, building your authority, not ours. `vibedeck.online` is the proof of concept. Your instance is the point.
 
 ---
 type: concept
@@ -166,12 +194,12 @@ type: summary
 ## The Full Picture
 
 - Five card types — title, concept, summary, graphic, quote
-- Markdown authoring with YAML frontmatter
-- Paginated navigation — swipe, buttons, keyboard
-- Organized by topic and keyword
-- Mobile-first, works everywhere
-- Open source, MIT licensed, self-hostable
-- `vibedeck.online` — the live proof of concept
+- Author in markdown, or in the browser — builder, editor, and sandbox
+- Paginated navigation — swipe, buttons, keyboard — plus transitions and bullet reveal
+- Author pages, topics, and keywords for organization
+- Public, unlisted, or private — with an embed widget for sharing
+- Custom themes, built in the browser
+- Open source, MIT licensed, self-hostable — standalone or multi-user
 
 ---
 type: quote

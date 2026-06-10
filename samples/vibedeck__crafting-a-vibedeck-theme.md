@@ -4,25 +4,35 @@ author: Rob Wall
 topic: vibedeck
 keywords: [theming, css, customization, reference]
 theme: operazione-stile
-description: How VibeDeck themes work, the token contract every theme fills in, and how to build or tweak your own.
+description: How VibeDeck themes work — the in-browser theme builder, the token contract every theme fills in, and the CSS-file route for self-hosters.
 ---
 ---
 type: title
 ---
 # Crafting a VibeDeck Theme
-### One CSS file, a handful of tokens
+### A handful of tokens, two ways to set them
 ---
 type: concept
 ---
-## One file per theme
+## Two ways to a theme
 
-A theme is a single CSS file in `src/styles/themes/`. A deck picks one with its frontmatter:
+**In the browser** — sign in and open the theme builder. Pick your colours, fonts, and shape tokens, save under a name, and set that name as your deck's `theme:`. No code, and it can't break anything: the builder only writes the safe token block.
+
+**As a CSS file** — running your own instance? Built-in themes are plain CSS files in `src/styles/themes/`, and you can add your own.
+
+Either way, every reader of your deck sees your theme — not just you.
+---
+type: concept
+---
+## How a deck picks its theme
+
+A deck names its theme in frontmatter:
 
 ```
 theme: operazione-stile
 ```
 
-That name maps straight to `themes/operazione-stile.css`. Unknown names fall back to `default.css`.
+Built-in names map straight to a file — `themes/operazione-stile.css`. Any other name looks up a theme *you* built under that name. No match? The deck falls back to `default`.
 ---
 type: concept
 ---
@@ -38,7 +48,7 @@ Components never hardcode colours — they read `--vd-*` variables. A theme's wh
 }
 ```
 
-`default.css` is the canonical list. Copy it, retune the values — but don't invent new variable *names* without adding them to every theme.
+`default.css` is the canonical list. The theme builder exposes the same tokens as controls — same contract, no syntax.
 ---
 type: summary
 ---
@@ -68,9 +78,9 @@ Define only what changes; everything else inherits from the dark defaults.
 ---
 type: concept
 ---
-## Restyling components
+## Restyling components (CSS-file themes)
 
-For a distinct look beyond colours, target a card's body with an ancestor chain — specific enough to beat the components' scoped styles:
+In a theme file, you can go beyond colours by targeting a card's body with an ancestor chain — specific enough to beat the components' scoped styles:
 
 ```
 .reader__stage .reader__card .card-body--quote {
@@ -79,16 +89,16 @@ For a distinct look beyond colours, target a card's body with an ancestor chain 
 }
 ```
 
-This is how the bespoke themes add stamps, rules, and textures.
+This is how the bespoke themes add stamps, rules, and textures. (The in-browser builder deliberately stays in token territory — that's what keeps it safe.)
 ---
 type: summary
 ---
 ## Make your own
 
-- Copy `default.css` to `themes/my-theme.css`
-- Retune the `--vd-*` values to taste
+- **No code:** sign in → theme builder → tune the tokens → save as `my-theme`
+- **Self-hosting:** copy `default.css` to `themes/my-theme.css` and retune the `--vd-*` values
 - Add a `:root[data-mode="light"]` block if you want light mode
-- Layer ancestor-chain rules for any deeper restyling
+- In a theme file, layer ancestor-chain rules for deeper restyling
 - Set `theme: my-theme` in a deck and reload
 
 <a href="/themes/default.css" download>↓ Download default.css</a> to start from.
