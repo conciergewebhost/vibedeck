@@ -247,7 +247,8 @@ optional: `description`, `visibility` (`public` / `unlisted` / `private`),
 `reveal: bullets` (bullet lists reveal one item per advance).
 **Card types:** `title`, `concept`, `summary`, `graphic`, `quote`. **Themes:**
 `operazione-stile`, `fascicolo`, `default` (see `frontend/src/styles/themes/`),
-or a per-user theme built in the theme builder. A card body cannot contain a line
+or a per-user theme built in the theme builder — see
+[`docs/THEMING.md`](docs/THEMING.md). A card body cannot contain a line
 that is exactly `---` (that's the card separator — use `***` for a horizontal rule).
 
 ### Adding a deck
@@ -310,6 +311,7 @@ handles TLS automatically.
 ## Documentation
 
 - [`SPEC.md`](SPEC.md) — the full product specification.
+- [`docs/THEMING.md`](docs/THEMING.md) — creating themes: the token contract, the in-browser builder, and CSS-file themes.
 - [`docs/EDITIONS.md`](docs/EDITIONS.md) — the standalone/server edition architecture and roadmap.
 - [`CLAUDE.md`](CLAUDE.md) — conventions and working notes (for contributors and
   AI coding assistants).
