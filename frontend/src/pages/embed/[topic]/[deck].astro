@@ -6,9 +6,9 @@
  * modal points here). Shows a first-slide thumbnail + title that fills the
  * iframe; clicking opens the shared deck modal with the full reader and NO
  * Embed/Edit/Delete (DeckModal is included with embeddable={false}, and a
- * third-party viewer is anonymous so owner actions are hidden). A "View on
- * vibedeck.online" link opens the deck (with its modal) on the site in a
- * new tab. Chrome-less (no navbar).
+ * third-party viewer is anonymous so owner actions are hidden). A "View
+ * on {site}" link opens the deck (with its modal) on the site in a new
+ * tab. Chrome-less (no navbar).
  */
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import DeckModal from "../../../components/DeckModal.astro";
@@ -39,6 +39,9 @@ const url = data.url;
 // relative to this page's v2 origin (the iframe's document), so it lands on
 // v2 even when the widget is embedded on another site.
 const viewUrl = `/decks?deck=${encodeURIComponent(url)}`;
+// Label the outbound link with this deployment's host (PUBLIC_SITE_URL →
+// Astro.site); generic fallback for instances that don't set one.
+const viewLabel = Astro.site ? `View on ${Astro.site.hostname} ↗` : "Open the full site ↗";
 const deckObj = {
   topic: topic!,
   slug: deck!,
@@ -73,7 +76,7 @@ const deckJson = JSON.stringify(deckObj).replace(/</g, "\\u003c");
         class="embed__ext"
         href={viewUrl}
         target="_blank"
-        rel="noopener">View on vibedeck.online ↗</a>
+        rel="noopener">{viewLabel}</a>
     </div>
   </main>
 

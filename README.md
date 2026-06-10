@@ -19,17 +19,36 @@ happens to work beautifully in a presentation context.
 - **Markdown decks** — one file per deck: YAML frontmatter + `---`-separated cards.
 - **Five card types** — `title`, `concept`, `summary`, `graphic`, `quote`.
 - **Mobile-first reader** — one card at a time, swipe / arrow-key / button nav,
-  progress indicator, and an index modal for jumping around.
-- **In-browser authoring** — a form-based **deck builder** and a raw **markdown editor**
-  in the `/account` portal, with live preview (no file upload needed).
+  progress indicator, an index modal, per-deck **card transitions**
+  (`slide`/`fade`/`none`), and optional **progressive bullet reveal**.
+- **In-browser authoring** — a form-based **deck builder**, a raw **markdown editor**
+  with live preview, and `.md`/`.css` **file uploads** that are inspected on the
+  way in (parse errors, unsafe markup, moderation, quotas — problems are
+  reported back verbatim).
 - **CSS-variable theming** — built-in themes (`operazione-stile`, `fascicolo`, `default`)
   with an OS-aware **dark/light toggle**, plus a form-based **theme builder** for per-user
   custom themes that render for **every** reader of a deck.
+- **Per-user spaces** *(server edition)* — every author has a public handle, an
+  author page (`/u/{handle}`), and namespaced deck URLs; legacy flat URLs 301.
+- **Discovery** — full-content **search** across the library and clickable
+  **keyword filtering** on every deck list.
 - **Per-deck visibility** — `public`, `unlisted` (link-only), or `private` (owner-only).
+- **Community safety** *(server edition)* — algorithmic **content moderation**
+  (auto-block egregious, quarantine suspicious for human review), a reader
+  **Report** path with auto-quarantine at a threshold, per-user **quotas**, and
+  **ban/deactivate** controls — all surfaced in the admin portal, with a daily
+  digest email.
+- **Roles** — promotable admins (`is_admin`); the owner manages roles and the
+  runtime **signup gate** (invite code on/off + the code itself) from the admin
+  Settings tab.
+- **Embeds** — every public deck has an `/embed/...` widget + copy-paste snippet.
 - **Two editions from one codebase** — an `EDITION` setting selects **standalone**
-  (single user) or **server** (multi-user host). See [`docs/EDITIONS.md`](docs/EDITIONS.md).
-- **Auth** — passwordless magic-link login + a discreet shared-token `/admin` surface.
-- **Server-side management CLI** — index, list, and delete decks from files.
+  (single user, flat URLs) or **server** (multi-user host). See
+  [`docs/EDITIONS.md`](docs/EDITIONS.md).
+- **Auth** — passwordless magic-link login, invite-gated signup with chosen
+  handles, and a session-first `/admin` surface (shared-token fallback).
+- **Server-side management CLI** — provision users, promote/demote, reindex,
+  tidy files, delete decks.
 
 ---
 
@@ -61,8 +80,9 @@ vibedeck/
 ├── frontend/           # Astro SSR project
 │   └── src/{layouts,pages,components,lib,styles/themes}
 ├── migrations/         # Alembic migrations
-├── decks/              # markdown decks (the canonical files / UPLOAD_DIR)
-├── deploy/             # systemd units + Caddy site block (templates)
+├── decks/              # LIVE deck files (UPLOAD_DIR) — gitignored user content
+├── samples/            # bundled reference decks (seed.py copies them in)
+├── deploy/             # systemd units (app + digest timer) + Caddy templates
 ├── alembic.ini  requirements.txt  .env.example  Caddyfile.example
 ├── SPEC.md             # full product spec
 └── README.md
@@ -113,6 +133,8 @@ Edit `.env` and set:
 | `BASE_URL` | `http://localhost:4321` for local dev |
 | `ENVIRONMENT` | `development` |
 | `EDITION` | `standalone` (single user, no public signup) or `server` (multi-user host); defaults to `standalone` |
+| `NEW_USER_CODE` | invite code that gates new sign-ups (seed value; changeable at runtime from the admin Settings tab) |
+| `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` | [Resend](https://resend.com) credentials for magic-link sign-in emails. Required to start (placeholders boot fine), but browser sign-in needs real values |
 
 ### 4. Backend
 
@@ -128,8 +150,8 @@ alembic upgrade head
 cd backend
 python manage.py create-user "$(grep ^UPLOAD_OWNER_EMAIL ../.env | cut -d= -f2)"
 
-# Index the sample decks under decks/ :
-python manage.py reindex
+# Seed the bundled sample decks (copies samples/ into decks/ and indexes):
+python seed.py
 
 # Run the API (must be started from the backend/ directory):
 uvicorn main:app --reload          # serves http://localhost:8000
@@ -183,7 +205,9 @@ Kept deliberately small. The constraint is the feature.
 ```
 
 **Frontmatter:** `title`, `author`, `topic`, `keywords`, `theme` are required;
-`description` and `visibility` (`public` / `unlisted` / `private`) are optional.
+optional: `description`, `visibility` (`public` / `unlisted` / `private`),
+`transition` (`slide` / `fade` / `none` — the reader's card animation), and
+`reveal: bullets` (bullet lists reveal one item per advance).
 **Card types:** `title`, `concept`, `summary`, `graphic`, `quote`. **Themes:**
 `operazione-stile`, `fascicolo`, `default` (see `frontend/src/styles/themes/`),
 or a per-user theme built in the theme builder. A card body cannot contain a line
@@ -207,11 +231,14 @@ that is exactly `---` (that's the card separator — use `***` for a horizontal 
 Run from `backend/` with the venv active:
 
 ```bash
-python manage.py create-user EMAIL [--password PW]   # provision a user
+python manage.py create-user EMAIL [--password PW] [--handle NAME]  # provision a user
 python manage.py delete-user EMAIL                   # (must own no decks)
+python manage.py promote-user EMAIL                  # grant the admin surface
+python manage.py demote-user EMAIL                   # revoke admin rights
 python manage.py list-decks                          # list indexed decks
-python manage.py reindex                             # index decks/*.md + prune
-python manage.py delete-deck TOPIC_SLUG DECK_SLUG    # remove a deck + prune
+python manage.py reindex                             # index all deck files + prune
+python manage.py tidy                                # move legacy flat files into owner dirs
+python manage.py delete-deck TOPIC_SLUG DECK_SLUG [--handle NAME]   # remove a deck
 ```
 
 ## Tests
@@ -231,6 +258,8 @@ adapt to your host (paths, the `node` binary location, ports, and your domain):
 
 - `deploy/systemd/vibedeck-api.service` — uvicorn backend
 - `deploy/systemd/vibedeck-web.service` — Astro SSR (`node ./dist/server/entry.mjs`)
+- `deploy/systemd/vibedeck-digest.{service,timer}` — the daily moderation digest
+  email (server edition)
 - `deploy/caddy/vibedeck.online.caddy` — reverse-proxies `/api/*` → backend, the
   rest → frontend (also see `Caddyfile.example`)
 

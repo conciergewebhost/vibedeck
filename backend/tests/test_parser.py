@@ -20,8 +20,9 @@ from services.parser import (  # noqa: E402
     parse_deck,
 )
 
-REPO_ROOT = BACKEND_DIR.parent
-FIXTURE = REPO_ROOT / "decks" / "the-12-houses.md"
+# The reference fixture ships WITH the tests (decks/ is live, untracked
+# content), so a fresh clone's suite passes out of the box.
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "the-12-houses.md"
 
 
 class TestValidDeck(unittest.TestCase):

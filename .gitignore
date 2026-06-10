@@ -18,13 +18,14 @@ frontend/.astro/
 npm-debug.log*
 
 # ── Uploaded deck files ───────────────────────────────────────
-# Decks are user content, not code: ignore everything under decks/
-# except the sample fixtures + reference decks that ship with the repo.
-decks/*.md
-!decks/vibedeck__what-is-vibedeck.md
-!decks/tradecraft-primer.md
-!decks/vibedeck__anatomy-of-a-vibedeck-file.md
-!decks/vibedeck__crafting-a-vibedeck-theme.md
+# decks/ is LIVE user content (the UPLOAD_DIR), never code. The reference
+# decks that ship with the repo live in samples/ instead; seed.py copies
+# them into a fresh instance's UPLOAD_DIR.
+decks/
+
+# The landing page is per-deployment (astro.config.mjs falls back to a
+# "/" -> /decks redirect when no local index.astro exists).
+frontend/src/pages/index.astro
 
 # ── Local, box-specific docs (never committed) ────────────────
 # Operational notes + private, box-only strategy notes; kept on the box only.
