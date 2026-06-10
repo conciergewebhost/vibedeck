@@ -66,6 +66,21 @@ const BUILTIN_THEMES = ["operazione-stile", "fascicolo", "default"];
             </select>
           </label>
           <label class="build__field">
+            <span>Card transition</span>
+            <select data-meta="transition">
+              <option value="slide">Slide — subtle directional slide (default)</option>
+              <option value="fade">Fade</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label class="build__field">
+            <span>Bullet points</span>
+            <select data-meta="reveal">
+              <option value="">Show all at once (default)</option>
+              <option value="bullets">Reveal one at a time</option>
+            </select>
+          </label>
+          <label class="build__field">
             <span>Description <em>(optional)</em></span>
             <input type="text" data-meta="description" placeholder="One-line summary" />
           </label>
@@ -205,7 +220,7 @@ const BUILTIN_THEMES = ["operazione-stile", "fascicolo", "default"];
   // ── State ──────────────────────────────────────────────────────────────
   type Card = { type: string; data: Record<string, any>; rawMode: boolean; raw: string };
   const state = {
-    meta: { title: "", author: "", topic: "", keywords: "", theme: "operazione-stile", visibility: "public", description: "" },
+    meta: { title: "", author: "", topic: "", keywords: "", theme: "operazione-stile", visibility: "public", transition: "slide", reveal: "", description: "" },
     cards: [] as Card[],
   };
 
@@ -243,6 +258,9 @@ const BUILTIN_THEMES = ["operazione-stile", "fascicolo", "default"];
     ];
     if (state.meta.visibility && state.meta.visibility !== "public")
       fm.push(`visibility: ${state.meta.visibility}`);
+    if (state.meta.transition && state.meta.transition !== "slide")
+      fm.push(`transition: ${state.meta.transition}`);
+    if (state.meta.reveal === "bullets") fm.push("reveal: bullets");
     if (state.meta.description) fm.push(`description: ${yamlValue(state.meta.description)}`);
     fm.push("---");
     const parts = [fm.join("\n")];

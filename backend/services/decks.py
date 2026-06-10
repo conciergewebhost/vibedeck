@@ -23,7 +23,7 @@ from services.indexing import (
     slugify,
 )
 from services.moderation import moderate_deck
-from services.parser import ParsedDeck, parse_deck
+from services.parser import VALID_TRANSITIONS, ParsedDeck, parse_deck
 from services.themes import get_user_theme_css
 from services.urls import deck_url
 
@@ -246,7 +246,15 @@ def get_deck(
         cards=cards,
         url=deck_url(deck),
         owner_handle=deck.owner.handle if deck.owner else None,
+        transition=_transition(parsed.meta),
+        reveal_bullets=parsed.meta.get("reveal") == "bullets",
     )
+
+
+def _transition(meta: dict) -> str:
+    """Normalized reader transition from frontmatter; unknown → slide."""
+    t = str(meta.get("transition", "slide"))
+    return t if t in VALID_TRANSITIONS else "slide"
 
 
 def get_deck_theme_css(

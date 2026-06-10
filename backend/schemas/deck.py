@@ -70,6 +70,10 @@ class DeckDetail(BaseModel):
     # preview, which never touches a deck row.
     url: str = ""
     owner_handle: str | None = None
+    # Reader behavior, from optional frontmatter (normalized server-side):
+    # `transition: slide|fade|none` and `reveal: bullets`.
+    transition: str = "slide"
+    reveal_bullets: bool = False
 
 
 class UploadResult(BaseModel):

@@ -77,6 +77,8 @@ description: A beginner-friendly introduction to the 12 houses in astrology.
 | `theme` | Yes | CSS theme identifier |
 | `description` | No | Short deck summary for index listing |
 | `visibility` | No | `public` (default, listed), `unlisted` (readable by link, kept out of listings), or `private` (owner-only; the public reader returns 404) |
+| `transition` | No | Card-change animation in the reader: `slide` (default, subtle directional slide), `fade`, or `none`. Unknown values fall back to `slide`; `prefers-reduced-motion` always disables animation |
+| `reveal` | No | `bullets` — bullet lists reveal one item per advance (next surfaces the next bullet before moving on; going back or jumping shows cards fully revealed). No-JS readers and embed thumbnails always see full content |
 
 ### Card Separator
 Cards are separated by `---` within the markdown file.
@@ -291,8 +293,12 @@ Unlisted and private decks are served with `noindex` (and private decks 404 publ
 - [x] Search across decks — full-content search (titles, descriptions, authors, keywords,
       card text) via an indexed `search_text` column; search box on `/decks` (`?q=…`,
       combinable with the keyword filter)
-- [ ] Transition effects between cards
-- [ ] Optional progressive reveal of bullet points (one at a time)
+- [x] Transition effects between cards — `transition: slide|fade|none` frontmatter
+      (slide default; reduced-motion respected)
+- [x] Optional progressive reveal of bullet points — `reveal: bullets` frontmatter;
+      both are settable in the deck builder
+
+**The v2 roadmap is complete.**
 
 ### Post-v2
 - [x] Multi-user publishing foundation — **per-user spaces**: public handles (chosen at signup),

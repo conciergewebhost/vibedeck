@@ -361,3 +361,37 @@ class TestSearch(_AppTestCase):
         )
         # Body words are NOT findable until reindexed — the documented gap.
         self.assertEqual(self.client.get("/api/decks/public?q=words").json(), [])
+
+
+class TestReaderBehaviorFields(_AppTestCase):
+    """`transition` / `reveal` frontmatter → DeckDetail, normalized."""
+
+    def _md_with(self, extra: str) -> str:
+        return _md().replace("theme: default", f"theme: default\n{extra}")
+
+    def test_fields_round_trip(self):
+        a = self._auth("alice@e.com")
+        self._mine(self._md_with("transition: fade\nreveal: bullets"), a)
+        deck = self.client.get("/api/decks/u/alice/tarot/basics").json()
+        self.assertEqual(deck["transition"], "fade")
+        self.assertTrue(deck["reveal_bullets"])
+
+    def test_defaults_and_fallbacks(self):
+        a = self._auth("alice@e.com")
+        self._mine(_md(title="Plain"), a)
+        plain = self.client.get("/api/decks/u/alice/tarot/plain").json()
+        self.assertEqual(plain["transition"], "slide")
+        self.assertFalse(plain["reveal_bullets"])
+        # Unknown transition value falls back to the default.
+        self._mine(self._md_with("transition: spin").replace("Basics", "Spinny"), a)
+        spinny = self.client.get("/api/decks/u/alice/tarot/spinny").json()
+        self.assertEqual(spinny["transition"], "slide")
+
+    def test_preview_honors_fields(self):
+        res = self.client.post(
+            "/api/decks/preview",
+            json={"markdown": self._md_with("transition: none\nreveal: bullets")},
+        )
+        body = res.json()
+        self.assertEqual(body["transition"], "none")
+        self.assertTrue(body["reveal_bullets"])

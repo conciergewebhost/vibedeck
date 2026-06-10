@@ -114,6 +114,11 @@ REQUIRED_DECK_FIELDS = ("title", "author", "topic", "keywords", "theme")
 # Optional `visibility` frontmatter field; absent means public.
 VALID_VISIBILITIES = frozenset({"public", "unlisted", "private"})
 
+# Optional `transition` frontmatter field (card-change animation in the
+# reader); absent or unknown means "slide". `reveal: bullets` is the other
+# optional reader field — bullet lists reveal one item per advance.
+VALID_TRANSITIONS = frozenset({"slide", "fade", "none"})
+
 
 @dataclass
 class ParsedCard:

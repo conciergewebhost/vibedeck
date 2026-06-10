@@ -24,7 +24,13 @@ const { deck, embed = false } = Astro.props;
 const total = deck.cards.length;
 ---
 
-<section class="reader" aria-roledescription="card deck" data-embed={embed ? "" : undefined}>
+<section
+  class="reader"
+  aria-roledescription="card deck"
+  data-embed={embed ? "" : undefined}
+  data-transition={deck.transition ?? "slide"}
+  data-reveal={deck.reveal_bullets ? "" : undefined}
+>
   <div class="reader__stage">
     {
       deck.cards.map((card, i) => (
@@ -89,15 +95,83 @@ const total = deck.cards.length;
     const modal = reader.querySelector<HTMLElement>("[data-modal]");
     let idx = 0;
 
-    function show(n: number) {
-      idx = Math.max(0, Math.min(total - 1, n));
+    // ── Author-controlled behavior (deck frontmatter, threaded via the
+    //    API): card-change transition + progressive bullet reveal. Both
+    //    respect prefers-reduced-motion; SSR renders bullets visible, so
+    //    no-JS readers and embed thumbnails always see full content.
+    const transition = reader.dataset.transition ?? "slide";
+    const revealMode = reader.hasAttribute("data-reveal");
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    // Per-card bullet lists + how many are currently revealed. The count
+    // persists, so returning to a half-read card resumes where it was.
+    const bullets: HTMLElement[][] = cards.map((c) =>
+      revealMode ? Array.from(c.querySelectorAll<HTMLElement>("li")) : [],
+    );
+    const revealed: number[] = cards.map(() => 0);
+
+    function applyReveal(i: number) {
+      bullets[i].forEach((li, n) =>
+        li.classList.toggle("vd-li-hidden", n >= revealed[i]),
+      );
+    }
+    function revealAll(i: number) {
+      revealed[i] = bullets[i].length;
+      applyReveal(i);
+    }
+    if (revealMode) cards.forEach((_, i) => applyReveal(i));
+
+    function animateIn(card: HTMLElement, dir: number) {
+      if (reduceMotion || transition === "none" || dir === 0) return;
+      const frames =
+        transition === "fade"
+          ? [{ opacity: 0 }, { opacity: 1 }]
+          : [
+              { opacity: 0, transform: `translateX(${24 * dir}px)` },
+              { opacity: 1, transform: "translateX(0)" },
+            ];
+      card.animate(frames, { duration: 200, easing: "ease-out" });
+    }
+
+    function show(n: number, opts: { dir?: number; full?: boolean } = {}) {
+      const target = Math.max(0, Math.min(total - 1, n));
+      const dir = opts.dir ?? Math.sign(target - idx);
+      const moved = target !== idx;
+      idx = target;
+      if (revealMode) {
+        if (opts.full) revealAll(idx);
+        else applyReveal(idx);
+      }
       cards.forEach((c, i) => {
         const active = i === idx;
         c.classList.toggle("is-active", active);
         c.setAttribute("aria-hidden", active ? "false" : "true");
       });
+      if (moved) animateIn(cards[idx], dir);
       if (currentEl) currentEl.textContent = String(idx + 1);
     }
+
+    // next: with reveal on, surface the card's next bullet first; advance
+    // to the next card only once everything on this one is shown.
+    function next() {
+      if (revealMode && revealed[idx] < bullets[idx].length) {
+        revealed[idx] += 1;
+        const li = bullets[idx][revealed[idx] - 1];
+        li.classList.remove("vd-li-hidden");
+        if (!reduceMotion && transition !== "none")
+          li.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 150,
+            easing: "ease-out",
+          });
+        return;
+      }
+      show(idx + 1, { dir: 1 });
+    }
+    // prev/jump: direct access — arrive with the card fully revealed.
+    const prev = () => show(idx - 1, { dir: -1, full: true });
+    const jump = (n: number) => show(n, { full: true });
 
     const openModal = () => modal?.removeAttribute("hidden");
     const closeModal = () => modal?.setAttribute("hidden", "");
@@ -105,8 +179,8 @@ const total = deck.cards.length;
     reader.querySelectorAll<HTMLElement>("[data-nav]").forEach((btn) => {
       btn.addEventListener("click", () => {
         switch (btn.dataset.nav) {
-          case "next": show(idx + 1); break;
-          case "prev": show(idx - 1); break;
+          case "next": next(); break;
+          case "prev": prev(); break;
           case "index": openModal(); break;
           case "close": closeModal(); break;
         }
@@ -115,7 +189,7 @@ const total = deck.cards.length;
 
     reader.querySelectorAll<HTMLElement>("[data-jump]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        show(Number(btn.dataset.jump));
+        jump(Number(btn.dataset.jump));
         closeModal();
       });
     });
@@ -126,8 +200,8 @@ const total = deck.cards.length;
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowRight") show(idx + 1);
-      else if (e.key === "ArrowLeft") show(idx - 1);
+      if (e.key === "ArrowRight") next();
+      else if (e.key === "ArrowLeft") prev();
       else if (e.key === "Escape") closeModal();
     });
 
@@ -143,7 +217,7 @@ const total = deck.cards.length;
       (e) => {
         if (startX === null) return;
         const dx = e.changedTouches[0].clientX - startX;
-        if (Math.abs(dx) > 40) show(dx < 0 ? idx + 1 : idx - 1);
+        if (Math.abs(dx) > 40) (dx < 0 ? next() : prev());
         startX = null;
       },
       { passive: true },
@@ -179,6 +253,12 @@ const total = deck.cards.length;
   }
   .reader__card.is-active {
     display: block;
+  }
+  /* Progressive bullet reveal: hidden-but-laid-out so nothing reflows as
+     items appear. Global — the lis live in set:html markdown content that
+     scoped styles can't reach. */
+  .reader :global(.vd-li-hidden) {
+    visibility: hidden;
   }
 
   .reader__nav {

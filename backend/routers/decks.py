@@ -158,6 +158,8 @@ def preview_deck(body: PreviewInput, request: Request) -> DeckDetail:
         theme=str(meta["theme"]),
         keywords=[str(k) for k in meta["keywords"]],
         cards=[Card(type=c.type, meta=c.meta, body=c.body) for c in parsed.cards],
+        transition=decks_service._transition(meta),
+        reveal_bullets=meta.get("reveal") == "bullets",
     )
 
 

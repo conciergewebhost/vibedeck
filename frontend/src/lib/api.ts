@@ -61,6 +61,8 @@ export interface DeckDetail {
   cards: Card[];
   url: string; // canonical reader path ("" for sandbox previews)
   owner_handle: string | null;
+  transition: "slide" | "fade" | "none"; // card-change animation
+  reveal_bullets: boolean; // bullets reveal one per advance
 }
 
 async function getJson<T>(path: string): Promise<T | null> {
